@@ -1,0 +1,28 @@
+{
+  "expo": {
+    "name": "Ody Dashboard",
+    "slug": "ody-dashboard",
+    "version": "1.0.0",
+    "scheme": "ody",
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#f59e0b"
+      }
+    }
+  }
+}

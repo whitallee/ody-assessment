@@ -1,0 +1,25 @@
+node_modules/
+.turbo/
+dist/
+.expo/
+web-build/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.local
+.dev.vars
+
+# Cloudflare
+.wrangler/
+
+# Generated
+packages/api-client/src/generated/
+services/backend/openapi.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Assessment specs
+fullstack_developer_assignment_ody.md

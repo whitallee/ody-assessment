@@ -1,0 +1,14 @@
+name = "ody-backend"
+main = "src/index.ts"
+compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+ENVIRONMENT = "production"
+
+# Add your Neon pooled connection string in Cloudflare dashboard as a secret:
+# wrangler secret put DATABASE_URL
+# Use the pooled URL (the one with -pooler in the hostname)
+
+[dev]
+port = 8787

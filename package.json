@@ -1,0 +1,22 @@
+{
+  "name": "ody-assessment",
+  "private": true,
+  "scripts": {
+    "dev:dashboard": "turbo run dev --filter=@ody/dashboard",
+    "dev:backend": "turbo run dev --filter=@ody/backend",
+    "gen:contract": "turbo run gen:spec --filter=@ody/backend && turbo run gen --filter=@ody/api-client",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "build": "turbo run build",
+    "db:push": "turbo run db:push --filter=@ody/backend",
+    "db:migrate": "turbo run db:migrate --filter=@ody/backend",
+    "db:studio": "turbo run db:studio --filter=@ody/backend",
+    "db:seed": "turbo run db:seed --filter=@ody/backend"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.0",
+    "typescript": "^5.7.0"
+  },
+  "packageManager": "pnpm@10.33.4"
+}
