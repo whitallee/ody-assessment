@@ -6,9 +6,8 @@ compatibility_flags = ["nodejs_compat"]
 [vars]
 ENVIRONMENT = "production"
 
-# Add your Neon pooled connection string in Cloudflare dashboard as a secret:
-# wrangler secret put DATABASE_URL
-# Use the pooled URL (the one with -pooler in the hostname)
+# Add your Neon connection string as a secret (use non-pooled URL):
+# wrangler secret put DATABASE_URL --config services/backend/wrangler.toml
 
 [dev]
 port = 8787
