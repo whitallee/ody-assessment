@@ -16,28 +16,17 @@ A fullstack restaurant operations dashboard built with the Ody production stack:
 
 ### 1. Environment Setup
 
-```bash
-cp .env.example .env
-```
-
-Edit `.env` with your Neon connection strings:
+Create a `.env` file at the monorepo root:
 ```env
-# Direct URL (non-pooled) — for Drizzle migrations
 DATABASE_URL=postgresql://user:pass@ep-xxx.us-east-2.aws.neon.tech/neondb?sslmode=require
-
-# Pooled URL — used by Cloudflare Workers at runtime
-DATABASE_URL_POOLED=postgresql://user:pass@ep-xxx-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require
-
-# Local dev API URL
-EXPO_PUBLIC_API_URL=http://localhost:8787
 ```
+
+Use the **non-pooled** URL. `@neondatabase/serverless` manages its own connection pooling over HTTP — adding Neon's pooler on top is redundant and can cause issues.
 
 Also create `services/backend/.dev.vars` (Wrangler reads this for local dev):
 ```env
-DATABASE_URL=postgresql://user:pass@ep-xxx-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require
+DATABASE_URL=postgresql://user:pass@ep-xxx.us-east-2.aws.neon.tech/neondb?sslmode=require
 ```
-
-> Use the **pooled** URL in `.dev.vars` — it's the one with `-pooler` in the hostname.
 
 ### 2. Install Dependencies
 
@@ -48,17 +37,18 @@ pnpm install
 ### 3. Database Setup
 
 ```bash
-# Push schema to Neon (creates all tables)
-pnpm db:migrate
+# Push schema to Neon (creates all tables directly — no migration files needed)
+pnpm db:push
 
 # Seed with sample restaurant data
 pnpm db:seed
 ```
 
+> `db:push` syncs the Drizzle schema directly to the database. For a production app with multiple environments, use `db:generate` + `db:migrate` to version migrations in source control.
+
 ### 4. Generate API Contract
 
 ```bash
-# Backend must be running OR use the static spec generator:
 pnpm gen:contract
 ```
 
@@ -76,7 +66,7 @@ pnpm dev:dashboard  # Expo web at http://localhost:8081
 
 Open [http://localhost:8081](http://localhost:8081) in your browser.
 
-> API docs are available at [http://localhost:8787/docs](http://localhost:8787/docs)
+> API docs available at [http://localhost:8787/docs](http://localhost:8787/docs)
 
 ---
 
@@ -87,7 +77,8 @@ Open [http://localhost:8081](http://localhost:8081) in your browser.
 | `pnpm dev:dashboard` | Start Expo web dev server |
 | `pnpm dev:backend` | Start Cloudflare Workers dev server |
 | `pnpm gen:contract` | Generate OpenAPI spec + Orval hooks |
-| `pnpm db:migrate` | Run Drizzle migrations against Neon |
+| `pnpm db:push` | Sync Drizzle schema to Neon (direct, no migration files) |
+| `pnpm db:migrate` | Apply versioned migrations (requires `db:generate` first) |
 | `pnpm db:seed` | Seed database with sample data |
 | `pnpm db:studio` | Open Drizzle Studio (DB GUI) |
 | `pnpm lint` | ESLint across all packages |
@@ -128,19 +119,18 @@ apps/
         crm/           # Customer relationship management
         menu/          # Menu categories and items
         settings/      # Business settings
-      ui-library/      # Design system showcase
     components/
       ui/              # Primitives: Button, Card, Badge, Input, Modal, Toast, Skeleton
       layout/          # Sidebar, PageLayout
       features/        # Domain-specific components
     lib/
-      api.ts           # Typed API layer (replaced by Orval output post-codegen)
+      api.ts           # Hand-written typed API layer (stopgap until Orval hooks are wired in)
 
 services/
   backend/             # Hono on Cloudflare Workers
     src/
       db/
-        schema.ts      # Drizzle table definitions + relations + enums
+        schema.ts      # Drizzle table definitions + relations + enums + ORDER_TRANSITIONS
         validators.ts  # drizzle-zod schemas (the API contract)
         seed.ts        # Sample data seed script
       routes/          # One file per resource
@@ -149,14 +139,14 @@ services/
 
 packages/
   shared/              # Design tokens + utility functions
-  api-client/          # Orval config + custom fetch wrapper
+  api-client/          # Orval config + custom fetch wrapper + generated hooks
   types/               # Re-exports from api-client
 ```
 
 ### Key Decisions
 
-**Why Neon?**
-Cloudflare Workers runs on V8 isolates with no TCP socket support. Neon's `@neondatabase/serverless` uses HTTP for database calls, making it the only Postgres driver that works in Workers without an intermediary (Hyperdrive, etc.).
+**Why Neon + non-pooled URL?**
+Cloudflare Workers runs on V8 isolates with no TCP socket support. Neon's `@neondatabase/serverless` uses HTTP for database calls, making it the only Postgres driver that works in Workers without an intermediary. It manages its own connection pooling internally, so the non-pooled URL is correct — adding Neon's PgBouncer pooler on top causes conflicts.
 
 **Why drizzle-zod?**
 Instead of manually writing Zod schemas that match the DB shape, `drizzle-zod` derives them automatically. This eliminates an entire class of schema drift bugs. The derived schemas are then extended with business rules (min lengths, format validation, etc.).
@@ -164,11 +154,17 @@ Instead of manually writing Zod schemas that match the DB shape, `drizzle-zod` d
 **Why static spec generation (not live-server codegen)?**
 `gen:contract` uses `app.getOpenAPI31Document()` on the Hono app without starting a server. This lets codegen run in CI without side effects and avoids the "start server, wait, curl, kill" pattern.
 
+**Why `initApiClient` instead of reading `EXPO_PUBLIC_API_URL` in the package?**
+Metro only inlines `EXPO_PUBLIC_*` env vars for files within the Expo project root (`apps/dashboard`). The `packages/api-client` fetcher lives outside that root, so `process.env.EXPO_PUBLIC_API_URL` would never be replaced. The fix: call `initApiClient(process.env.EXPO_PUBLIC_API_URL)` from the root layout inside the Expo project, where Metro's substitution works correctly.
+
 **Why Expo Router over a plain SPA?**
-The assessment specifies Expo + React Native + Web. Expo Router provides file-based routing on both web and native from a single codebase. The web output is a standard bundle that deploys to Cloudflare Pages.
+The assessment specifies Expo + React Native + Web. Expo Router provides file-based routing on both web and native from a single codebase. The web output is a standard static bundle that deploys to Cloudflare Pages.
+
+**Order status state machine**
+Order status transitions are enforced server-side via `ORDER_TRANSITIONS` in `schema.ts`. The API rejects invalid transitions (e.g., `completed → pending`) with a 400. The frontend only shows valid next-state actions based on the current status.
 
 **Design token strategy**
-All design values (color, spacing, typography, shadow) live in `packages/shared/src/tokens.ts`. Components import from there rather than using raw values. The UI Library page at `/ui-library` renders the full token set as a living reference.
+All design values (color, spacing, typography, shadow) live in `packages/shared/src/tokens.ts`. Components import from there rather than using raw values.
 
 ---
 
@@ -195,25 +191,30 @@ All design values (color, spacing, typography, shadow) live in `packages/shared/
 ### Backend (Cloudflare Workers)
 
 ```bash
-# Set production secret
-wrangler secret put DATABASE_URL
-# (paste your pooled Neon URL when prompted)
+# Set the database secret (use non-pooled Neon URL)
+wrangler secret put DATABASE_URL --config services/backend/wrangler.toml
 
 # Deploy
-pnpm --filter @ody/backend deploy
+pnpm --filter @ody/backend run deploy
 ```
+
+Live at: `https://ody-backend.whitallee.workers.dev`
 
 ### Dashboard (Cloudflare Pages)
 
-```bash
-# Build Expo web output
-pnpm --filter @ody/dashboard build:web
+The production API URL is baked in at build time via the `build:web` script:
 
-# Deploy to Pages (first time: create project via dashboard)
-npx wrangler pages deploy apps/dashboard/dist
+```bash
+# Build (EXPO_PUBLIC_API_URL is set inline in the build script)
+pnpm --filter @ody/dashboard run build:web
+
+# Deploy
+wrangler pages deploy apps/dashboard/dist --project-name ody-dashboard
 ```
 
-Set `EXPO_PUBLIC_API_URL` to your deployed Workers URL in the Cloudflare Pages environment variables.
+Live at: `https://ody-dashboard-4do.pages.dev`
+
+> For a proper multi-environment setup, remove the hardcoded URL from `build:web` and set `EXPO_PUBLIC_API_URL` as an environment variable in the Cloudflare Pages dashboard under Settings → Environment Variables. Pages injects it at build time automatically.
 
 ---
 
@@ -223,17 +224,18 @@ Set `EXPO_PUBLIC_API_URL` to your deployed Workers URL in the Cloudflare Pages e
 - **No authentication** — the assessment is an internal ops dashboard and auth was not listed as a requirement. A production version would add Cloudflare Access or a JWT middleware.
 - **No pagination UI** — the API supports `limit`/`offset` params, but the dashboard currently loads everything and relies on backend limiting defaults.
 - **No image upload** — menu items have an `imageUrl` field but the create/edit modal accepts a URL string, not a file upload. A production version would add Cloudflare R2 + presigned upload.
-- **Native readiness** — the assessment marks this as "bonus". Components use React Native primitives so native would work structurally, but layouts aren't tested on device. The font loading and StyleSheet approach is cross-platform.
+- **Native readiness** — components use React Native primitives so native would work structurally, but layouts are optimized for web and haven't been tested on device.
 
 ### Known rough edges
-- The Orval-generated hooks in `packages/api-client/src/generated/` don't exist until `pnpm gen:contract` is run. The dashboard uses a hand-written `lib/api.ts` as a stopgap that matches the same interface. After codegen, pages should import from `@ody/api-client` directly.
-- Wrangler local dev uses a mock `[vars]` section for the environment name but reads secrets from `.dev.vars`. First-time setup requires creating that file manually (documented above).
-- TypeScript strict mode is enabled across all packages. The `@cloudflare/workers-types` and `expo/tsconfig.base` have some minor conflicts that are suppressed with `skipLibCheck`.
+- Dashboard pages currently use the hand-written `lib/api.ts` instead of the Orval-generated hooks from `packages/api-client/src/generated/`. The generated hooks exist and are exported — wiring them into each page is the next step.
+- Drizzle is using `db:push` (direct schema sync) rather than versioned migrations. Fast for development, but a production app should use `db:generate` + `db:migrate` so schema history is tracked in source control.
+- Wrangler local dev reads secrets from `.dev.vars`. First-time setup requires creating that file manually (documented above).
 
 ### What I'd add with more time
-- Drizzle migrations versioned in `/migrations` (currently using `db:push` for speed)
+- Wire Orval-generated React Query hooks into all dashboard pages
+- Drizzle migrations versioned in source control
 - E2E tests with Playwright
-- Optimistic updates on status changes (currently waits for server response)
+- Optimistic updates on order status changes
 - Real-time order updates via Cloudflare Durable Objects or Server-Sent Events
-- Menu item drag-to-reorder (already have `sortOrder` in schema)
-- Customer search/filter on the CRM page
+- Menu item drag-to-reorder (schema already has `sortOrder` column)
+- Customer search and filter on the CRM page
