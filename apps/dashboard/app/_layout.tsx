@@ -1,6 +1,9 @@
 import { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
+import { initApiClient } from '@ody/api-client';
+
+initApiClient(process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8787');
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   useFonts,

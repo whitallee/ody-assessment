@@ -1,11 +1,10 @@
-/**
- * Custom fetch wrapper for Orval-generated API calls.
- * Reads the base URL from the EXPO_PUBLIC_API_URL env var at runtime.
- */
-const getBaseUrl = () =>
-  (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_API_URL) ||
-  (typeof window !== 'undefined' && (window as Record<string, unknown>).__ODY_API_URL__) ||
-  'http://localhost:8787';
+let _baseUrl = 'http://localhost:8787';
+
+export function initApiClient(baseUrl: string) {
+  _baseUrl = baseUrl;
+}
+
+const getBaseUrl = () => _baseUrl;
 
 export type ErrorType<T = unknown> = T;
 
