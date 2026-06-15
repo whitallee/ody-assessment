@@ -6,7 +6,7 @@ import { Card } from '@/components/ui/Card';
 import { Typography } from '@/components/ui/Typography';
 import { OrderStatusBadge } from '@/components/ui/Badge';
 import { Skeleton, SkeletonCard } from '@/components/ui/Skeleton';
-import { api, type HomeStats, type OrderWithDetails } from '@/lib/api';
+import { api, type HomeStats, type OrderWithDetails, type Reservation } from '@/lib/api';
 
 export default function HomePage() {
   const { data, isLoading, isError } = useQuery({
@@ -51,6 +51,13 @@ export default function HomePage() {
             accent={colors.info[500]}
             loading={isLoading}
           />
+          <KpiCard
+            label="Reservations Today"
+            value={isLoading ? undefined : String(data?.reservationsToday ?? 0)}
+            sub={isLoading ? undefined : `${data?.upcomingReservations?.length ?? 0} upcoming`}
+            accent={colors.brand[400]}
+            loading={isLoading}
+          />
         </View>
       </Section>
 
@@ -69,6 +76,29 @@ export default function HomePage() {
               ))
             : data?.recentOrders?.map((order) => (
                 <RecentOrderRow key={order.id} order={order} />
+              ))}
+        </Card>
+
+        {/* Upcoming Reservations */}
+        <Card style={styles.popularCard} padding="none">
+          <View style={styles.cardHeader}>
+            <Typography variant="heading4">Upcoming Reservations</Typography>
+          </View>
+          {isLoading
+            ? Array.from({ length: 4 }).map((_, i) => (
+                <View key={i} style={styles.orderRowSkeleton}>
+                  <Skeleton width="35%" height={12} />
+                  <Skeleton width="20%" height={12} />
+                </View>
+              ))
+            : (data?.upcomingReservations?.length ?? 0) === 0
+            ? (
+              <View style={styles.emptyRow}>
+                <Typography variant="body" color="tertiary">No upcoming reservations</Typography>
+              </View>
+            )
+            : data?.upcomingReservations?.map((r) => (
+                <UpcomingReservationRow key={r.id} reservation={r} />
               ))}
         </Card>
 
@@ -164,6 +194,31 @@ function KpiCard({
         </>
       )}
     </Card>
+  );
+}
+
+function UpcomingReservationRow({ reservation: r }: { reservation: Reservation }) {
+  const time = new Date(r.reservationDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const isToday = new Date(r.reservationDate).toDateString() === new Date().toDateString();
+  return (
+    <View style={styles.orderRow}>
+      <View style={styles.orderRowLeft}>
+        <Typography variant="bodyMedium">{r.customerName}</Typography>
+        <Typography variant="caption" color="secondary">
+          {isToday ? 'Today' : 'Tomorrow'} at {time} · Party of {r.partySize}
+        </Typography>
+      </View>
+      <View style={styles.orderRowRight}>
+        <View style={[styles.resBadge, { backgroundColor: r.status === 'confirmed' ? colors.brand[100] : colors.warning[50] }]}>
+          <Typography style={[styles.resBadgeText, { color: r.status === 'confirmed' ? colors.brand[700] : colors.warning[600] }]}>
+            {r.status === 'confirmed' ? 'Confirmed' : 'Pending'}
+          </Typography>
+        </View>
+        {r.tableNumber && (
+          <Typography variant="caption" color="secondary">Table {r.tableNumber}</Typography>
+        )}
+      </View>
+    </View>
   );
 }
 
@@ -264,6 +319,19 @@ const styles = StyleSheet.create({
   },
   popularRank: { width: 28 },
   popularName: { flex: 1 },
+  emptyRow: {
+    padding: spacing[5],
+    alignItems: 'center',
+  },
+  resBadge: {
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 20,
+  },
+  resBadgeText: {
+    fontSize: 11,
+    fontFamily: 'Inter_600SemiBold',
+  },
   statusGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',

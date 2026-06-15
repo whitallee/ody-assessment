@@ -7,7 +7,9 @@ import {
   orders,
   orderItems,
   settings,
+  reservations,
   orderStatusEnum,
+  reservationStatusEnum,
 } from './schema';
 
 // ─── Menu Categories ──────────────────────────────────────────────────────────
@@ -139,6 +141,37 @@ export const UpdateSettingsSchema = createInsertSchema(settings, {
 export type Settings = z.infer<typeof SettingsSchema>;
 export type UpdateSettings = z.infer<typeof UpdateSettingsSchema>;
 
+// ─── Reservations ─────────────────────────────────────────────────────────────
+
+export const ReservationStatusSchema = z.enum(reservationStatusEnum.enumValues);
+
+export const ReservationSchema = createSelectSchema(reservations);
+
+export const ReservationWithCustomerSchema = ReservationSchema.extend({
+  customer: CustomerSchema.nullable(),
+});
+
+export const CreateReservationSchema = createInsertSchema(reservations, {
+  customerName: z.string().min(1).max(200),
+  customerPhone: z.string().max(20).optional().nullable(),
+  partySize: z.number().int().min(1).max(50),
+  reservationDate: z.string().datetime(),
+  tableNumber: z.string().max(20).optional().nullable(),
+  notes: z.string().max(1000).optional().nullable(),
+}).omit({ id: true, createdAt: true, updatedAt: true });
+
+export const UpdateReservationSchema = CreateReservationSchema.partial();
+
+export const UpdateReservationStatusSchema = z.object({
+  status: ReservationStatusSchema,
+});
+
+export type Reservation = z.infer<typeof ReservationSchema>;
+export type ReservationWithCustomer = z.infer<typeof ReservationWithCustomerSchema>;
+export type CreateReservation = z.infer<typeof CreateReservationSchema>;
+export type UpdateReservation = z.infer<typeof UpdateReservationSchema>;
+export type UpdateReservationStatus = z.infer<typeof UpdateReservationStatusSchema>;
+
 // ─── Home / KPIs ─────────────────────────────────────────────────────────────
 
 export const HomeStatsSchema = z.object({
@@ -147,6 +180,8 @@ export const HomeStatsSchema = z.object({
   pendingOrders: z.number().int(),
   totalOrdersAllTime: z.number().int(),
   revenueAllTime: z.number().int(),
+  reservationsToday: z.number().int(),
+  upcomingReservations: z.array(ReservationWithCustomerSchema),
   popularItems: z.array(
     z.object({
       menuItemId: z.string().uuid(),

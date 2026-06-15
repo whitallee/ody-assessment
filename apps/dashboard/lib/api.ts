@@ -99,12 +99,37 @@ export type Settings = {
   updatedAt: string;
 };
 
+export type ReservationStatus =
+  | 'pending'
+  | 'confirmed'
+  | 'seated'
+  | 'completed'
+  | 'cancelled'
+  | 'no_show';
+
+export type Reservation = {
+  id: string;
+  customerId: string | null;
+  customerName: string;
+  customerPhone: string | null;
+  partySize: number;
+  reservationDate: string;
+  status: ReservationStatus;
+  tableNumber: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  customer?: Customer | null;
+};
+
 export type HomeStats = {
   totalOrdersToday: number;
   revenueToday: number;
   pendingOrders: number;
   totalOrdersAllTime: number;
   revenueAllTime: number;
+  reservationsToday: number;
+  upcomingReservations: Reservation[];
   popularItems: { menuItemId: string; name: string; orderCount: number; revenueCents: number }[];
   recentOrders: OrderWithDetails[];
   ordersByStatus: Record<string, number>;
@@ -171,5 +196,28 @@ export const api = {
 
   home: {
     stats: () => customFetch<HomeStats>(url('/home/stats')),
+  },
+
+  reservations: {
+    list: (params?: { status?: string; date?: string; limit?: number; offset?: number }) => {
+      const qs = new URLSearchParams(params as Record<string, string>).toString();
+      return customFetch<{ data: Reservation[]; total: number }>(url(`/reservations${qs ? `?${qs}` : ''}`));
+    },
+    get: (id: string) => customFetch<Reservation>(url(`/reservations/${id}`)),
+    create: (body: {
+      customerName: string;
+      customerPhone?: string;
+      partySize: number;
+      reservationDate: string;
+      tableNumber?: string;
+      notes?: string;
+      customerId?: string;
+    }) => customFetch<Reservation>(url('/reservations'), { method: 'POST', body: JSON.stringify(body) }),
+    update: (id: string, body: Partial<{ customerName: string; customerPhone: string; partySize: number; reservationDate: string; tableNumber: string; notes: string }>) =>
+      customFetch<Reservation>(url(`/reservations/${id}`), { method: 'PUT', body: JSON.stringify(body) }),
+    updateStatus: (id: string, status: string) =>
+      customFetch<Reservation>(url(`/reservations/${id}/status`), { method: 'PATCH', body: JSON.stringify({ status }) }),
+    delete: (id: string) =>
+      customFetch<{ success: boolean }>(url(`/reservations/${id}`), { method: 'DELETE' }),
   },
 };

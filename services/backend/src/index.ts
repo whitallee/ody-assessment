@@ -7,6 +7,7 @@ import { ordersRoutes } from './routes/orders';
 import { customersRoutes } from './routes/customers';
 import { settingsRoutes } from './routes/settings';
 import { homeRoutes } from './routes/home';
+import { reservationsRoutes } from './routes/reservations';
 import { createDb } from './db';
 
 export type Env = {
@@ -37,6 +38,7 @@ app.route('/orders', ordersRoutes);
 app.route('/customers', customersRoutes);
 app.route('/settings', settingsRoutes);
 app.route('/home', homeRoutes);
+app.route('/reservations', reservationsRoutes);
 
 // ─── OpenAPI spec ─────────────────────────────────────────────────────────────
 

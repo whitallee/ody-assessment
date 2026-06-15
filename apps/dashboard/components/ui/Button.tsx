@@ -40,7 +40,7 @@ const variantConfig = {
   danger: {
     bg: colors.error[600],
     bgHover: colors.error[700],
-    bgPressed: colors.error[800],
+    bgPressed: colors.error[700],
     text: colors.neutral[0],
     border: 'transparent',
   },

@@ -138,7 +138,9 @@ export default function MenuPage() {
               <Typography variant="body" color="tertiary">
                 Add your first menu item to get started.
               </Typography>
-              <Button label="Add Item" onPress={() => setShowCreateItem(true)} style={{ marginTop: 8 }} />
+              <View style={{ marginTop: 8 }}>
+                <Button label="Add Item" onPress={() => setShowCreateItem(true)} />
+              </View>
             </View>
           )}
         </View>

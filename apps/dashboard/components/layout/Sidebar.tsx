@@ -12,6 +12,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { label: 'Home', href: '/', icon: '⌂' },
   { label: 'Orders', href: '/orders', icon: '📋' },
+  { label: 'Reservations', href: '/reservations', icon: '📅' },
   { label: 'Menu', href: '/menu', icon: '🍽' },
   { label: 'CRM', href: '/crm', icon: '👥' },
   { label: 'Settings', href: '/settings', icon: '⚙' },

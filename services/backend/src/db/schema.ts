@@ -32,6 +32,15 @@ export const dayOfWeekEnum = pgEnum('day_of_week', [
   'sunday',
 ]);
 
+export const reservationStatusEnum = pgEnum('reservation_status', [
+  'pending',
+  'confirmed',
+  'seated',
+  'completed',
+  'cancelled',
+  'no_show',
+]);
+
 // ─── Menu Categories ──────────────────────────────────────────────────────────
 
 export const menuCategories = pgTable('menu_categories', {
@@ -106,6 +115,22 @@ export const orderItems = pgTable('order_items', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+// ─── Reservations ─────────────────────────────────────────────────────────────
+
+export const reservations = pgTable('reservations', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  customerId: uuid('customer_id').references(() => customers.id, { onDelete: 'set null' }),
+  customerName: text('customer_name').notNull(),
+  customerPhone: text('customer_phone'),
+  partySize: integer('party_size').notNull(),
+  reservationDate: timestamp('reservation_date', { withTimezone: true }).notNull(),
+  status: reservationStatusEnum('status').notNull().default('pending'),
+  tableNumber: text('table_number'),
+  notes: text('notes'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 // ─── Business Settings ────────────────────────────────────────────────────────
 
 export const settings = pgTable('settings', {
@@ -135,6 +160,14 @@ export const menuItemsRelations = relations(menuItems, ({ one }) => ({
 
 export const customersRelations = relations(customers, ({ many }) => ({
   orders: many(orders),
+  reservations: many(reservations),
+}));
+
+export const reservationsRelations = relations(reservations, ({ one }) => ({
+  customer: one(customers, {
+    fields: [reservations.customerId],
+    references: [customers.id],
+  }),
 }));
 
 export const ordersRelations = relations(orders, ({ one, many }) => ({
@@ -175,7 +208,6 @@ export type OpeningHours = {
 
 export type OrderStatus = (typeof orderStatusEnum.enumValues)[number];
 
-// Valid state machine transitions
 export const ORDER_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   pending: ['accepted', 'cancelled'],
   accepted: ['preparing', 'cancelled'],
@@ -183,4 +215,15 @@ export const ORDER_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   ready: ['completed'],
   completed: [],
   cancelled: [],
+};
+
+export type ReservationStatus = (typeof reservationStatusEnum.enumValues)[number];
+
+export const RESERVATION_TRANSITIONS: Record<ReservationStatus, ReservationStatus[]> = {
+  pending: ['confirmed', 'cancelled'],
+  confirmed: ['seated', 'cancelled', 'no_show'],
+  seated: ['completed'],
+  completed: [],
+  cancelled: [],
+  no_show: [],
 };

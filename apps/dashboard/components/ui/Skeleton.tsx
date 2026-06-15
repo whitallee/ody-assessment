@@ -30,7 +30,7 @@ export function Skeleton({
 
   return (
     <Animated.View
-      style={[{ width, height, borderRadius, backgroundColor: colors.neutral[200], opacity }, style]}
+      style={[{ width: width as number, height, borderRadius, backgroundColor: colors.neutral[200], opacity }, style]}
       {...props}
     />
   );

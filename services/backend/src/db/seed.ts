@@ -13,6 +13,7 @@ import {
   orders,
   orderItems,
   settings,
+  reservations,
 } from './schema';
 
 const db = createDb(process.env.DATABASE_URL!);
@@ -102,6 +103,7 @@ async function seed() {
   console.log('  ✓ Menu items');
 
   // Customers
+  await db.delete(reservations);
   await db.delete(customers);
   const [alice, bob, carol, david, emma] = await db
     .insert(customers)
@@ -162,6 +164,28 @@ async function seed() {
     { orderId: order8.id, menuItemId: chicken.id, quantity: 1, unitPriceCents: chicken.priceCents, subtotalCents: chicken.priceCents },
   ]);
   console.log('  ✓ Order items');
+
+  // Reservations
+  await db.delete(reservations);
+  const daysFromNow = (d: number, h = 19, m = 0) => {
+    const dt = new Date(now);
+    dt.setDate(dt.getDate() + d);
+    dt.setHours(h, m, 0, 0);
+    return dt;
+  };
+
+  await db.insert(reservations).values([
+    { customerName: 'Alice Rossi', customerId: alice.id, customerPhone: '+1 (555) 111-2222', partySize: 2, reservationDate: daysFromNow(0, 19, 0), status: 'confirmed', tableNumber: '4', notes: 'Anniversary dinner' },
+    { customerName: 'Bob Tanaka', customerId: bob.id, customerPhone: '+1 (555) 333-4444', partySize: 4, reservationDate: daysFromNow(0, 20, 30), status: 'pending', tableNumber: '7' },
+    { customerName: 'Carol Müller', customerId: carol.id, customerPhone: '+1 (555) 555-6666', partySize: 3, reservationDate: daysFromNow(1, 18, 30), status: 'confirmed' },
+    { customerName: 'David Chen', customerId: david.id, customerPhone: '+1 (555) 777-8888', partySize: 6, reservationDate: daysFromNow(1, 19, 30), status: 'pending', tableNumber: '12', notes: 'Birthday party, need cake service' },
+    { customerName: 'Emma Patel', customerId: emma.id, customerPhone: '+1 (555) 999-0000', partySize: 2, reservationDate: daysFromNow(2, 20, 0), status: 'confirmed', tableNumber: '2' },
+    { customerName: 'Marco Russo', customerPhone: '+1 (555) 123-9876', partySize: 5, reservationDate: daysFromNow(3, 19, 0), status: 'pending' },
+    { customerName: 'Sophie Laurent', customerPhone: '+33 6 12 34 56 78', partySize: 2, reservationDate: daysFromNow(-1, 20, 0), status: 'completed', tableNumber: '3' },
+    { customerName: 'James Park', customerPhone: '+1 (555) 456-7890', partySize: 3, reservationDate: daysFromNow(-1, 19, 0), status: 'no_show' },
+    { customerName: 'Lucia Fernandez', customerPhone: '+1 (555) 234-5678', partySize: 4, reservationDate: daysFromNow(-2, 18, 30), status: 'completed', tableNumber: '8', notes: 'Gluten-free options needed' },
+  ]);
+  console.log('  ✓ Reservations');
 
   console.log('\n✅ Seed complete!');
 }

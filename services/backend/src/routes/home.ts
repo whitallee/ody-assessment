@@ -1,7 +1,7 @@
 import { OpenAPIHono, createRoute } from '@hono/zod-openapi';
-import { eq, desc, gte, sql } from 'drizzle-orm';
+import { eq, desc, gte, lte, and, sql } from 'drizzle-orm';
 import type { Env } from '../index';
-import { orders, orderItems, menuItems } from '../db/schema';
+import { orders, orderItems, menuItems, reservations } from '../db/schema';
 import { HomeStatsSchema } from '../db/validators';
 
 export const homeRoutes = new OpenAPIHono<Env>();
@@ -23,11 +23,15 @@ homeRoutes.openapi(
     const db = c.get('db');
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
+    const tomorrowEnd = new Date(todayStart);
+    tomorrowEnd.setDate(tomorrowEnd.getDate() + 2);
 
     const [
       [{ totalOrdersToday, revenueToday }],
       [{ totalOrdersAllTime, revenueAllTime }],
       [{ pendingOrders }],
+      [{ reservationsToday }],
+      upcomingReservations,
       popularItemsRaw,
       recentOrders,
       ordersByStatusRaw,
@@ -51,6 +55,27 @@ homeRoutes.openapi(
         .select({ pendingOrders: sql<number>`count(*)::int` })
         .from(orders)
         .where(eq(orders.status, 'pending')),
+
+      db
+        .select({ reservationsToday: sql<number>`count(*)::int` })
+        .from(reservations)
+        .where(
+          and(
+            gte(reservations.reservationDate, todayStart),
+            lte(reservations.reservationDate, new Date(todayStart.getTime() + 86_400_000)),
+          ),
+        ),
+
+      db.query.reservations.findMany({
+        with: { customer: true },
+        where: and(
+          gte(reservations.reservationDate, todayStart),
+          lte(reservations.reservationDate, tomorrowEnd),
+          sql`${reservations.status} IN ('pending', 'confirmed')`,
+        ),
+        orderBy: [reservations.reservationDate],
+        limit: 5,
+      }),
 
       db
         .select({
@@ -91,6 +116,8 @@ homeRoutes.openapi(
         pendingOrders,
         totalOrdersAllTime,
         revenueAllTime,
+        reservationsToday,
+        upcomingReservations,
         popularItems: popularItemsRaw,
         recentOrders,
         ordersByStatus,
