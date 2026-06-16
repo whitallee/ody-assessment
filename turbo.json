@@ -24,6 +24,9 @@
       "cache": false,
       "outputs": ["src/generated/**"]
     },
+    "db:generate": {
+      "cache": false
+    },
     "db:push": {
       "cache": false
     },

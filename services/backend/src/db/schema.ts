@@ -41,6 +41,19 @@ export const reservationStatusEnum = pgEnum('reservation_status', [
   'no_show',
 ]);
 
+export const rewardTypeEnum = pgEnum('reward_type', [
+  'discount_percent',
+  'discount_fixed',
+  'free_item',
+]);
+
+export const loyaltyTxTypeEnum = pgEnum('loyalty_tx_type', [
+  'earn',
+  'redeem',
+  'adjustment',
+  'expire',
+]);
+
 // ─── Menu Categories ──────────────────────────────────────────────────────────
 
 export const menuCategories = pgTable('menu_categories', {
@@ -131,6 +144,36 @@ export const reservations = pgTable('reservations', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+// ─── Rewards ──────────────────────────────────────────────────────────────────
+
+export const rewards = pgTable('rewards', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  name: text('name').notNull(),
+  description: text('description'),
+  pointsCost: integer('points_cost').notNull(),
+  rewardType: rewardTypeEnum('reward_type').notNull(),
+  discountValue: integer('discount_value'),
+  menuItemId: uuid('menu_item_id').references(() => menuItems.id, { onDelete: 'set null' }),
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ─── Loyalty Transactions ─────────────────────────────────────────────────────
+
+export const loyaltyTransactions = pgTable('loyalty_transactions', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  customerId: uuid('customer_id')
+    .notNull()
+    .references(() => customers.id, { onDelete: 'cascade' }),
+  orderId: uuid('order_id').references(() => orders.id, { onDelete: 'set null' }),
+  rewardId: uuid('reward_id').references(() => rewards.id, { onDelete: 'set null' }),
+  type: loyaltyTxTypeEnum('type').notNull(),
+  points: integer('points').notNull(),
+  description: text('description').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 // ─── Business Settings ────────────────────────────────────────────────────────
 
 export const settings = pgTable('settings', {
@@ -142,6 +185,8 @@ export const settings = pgTable('settings', {
   restaurantPhone: text('restaurant_phone'),
   restaurantAddress: text('restaurant_address'),
   openingHours: jsonb('opening_hours').$type<OpeningHours>(),
+  loyaltyPointsPerDollar: integer('loyalty_points_per_dollar').notNull().default(10),
+  loyaltyEnabled: boolean('loyalty_enabled').notNull().default(true),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -161,6 +206,30 @@ export const menuItemsRelations = relations(menuItems, ({ one }) => ({
 export const customersRelations = relations(customers, ({ many }) => ({
   orders: many(orders),
   reservations: many(reservations),
+  loyaltyTransactions: many(loyaltyTransactions),
+}));
+
+export const rewardsRelations = relations(rewards, ({ one, many }) => ({
+  menuItem: one(menuItems, {
+    fields: [rewards.menuItemId],
+    references: [menuItems.id],
+  }),
+  loyaltyTransactions: many(loyaltyTransactions),
+}));
+
+export const loyaltyTransactionsRelations = relations(loyaltyTransactions, ({ one }) => ({
+  customer: one(customers, {
+    fields: [loyaltyTransactions.customerId],
+    references: [customers.id],
+  }),
+  order: one(orders, {
+    fields: [loyaltyTransactions.orderId],
+    references: [orders.id],
+  }),
+  reward: one(rewards, {
+    fields: [loyaltyTransactions.rewardId],
+    references: [rewards.id],
+  }),
 }));
 
 export const reservationsRelations = relations(reservations, ({ one }) => ({
@@ -218,6 +287,8 @@ export const ORDER_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
 };
 
 export type ReservationStatus = (typeof reservationStatusEnum.enumValues)[number];
+export type RewardType = (typeof rewardTypeEnum.enumValues)[number];
+export type LoyaltyTxType = (typeof loyaltyTxTypeEnum.enumValues)[number];
 
 export const RESERVATION_TRANSITIONS: Record<ReservationStatus, ReservationStatus[]> = {
   pending: ['confirmed', 'cancelled'],

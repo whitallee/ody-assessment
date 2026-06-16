@@ -96,7 +96,47 @@ export type Settings = {
   autoAcceptOrders: boolean;
   isOpen: boolean;
   openingHours: Record<string, { open: string; close: string; isClosed: boolean }> | null;
+  loyaltyPointsPerDollar: number;
+  loyaltyEnabled: boolean;
   updatedAt: string;
+};
+
+export type RewardType = 'discount_percent' | 'discount_fixed' | 'free_item';
+
+export type Reward = {
+  id: string;
+  name: string;
+  description: string | null;
+  pointsCost: number;
+  rewardType: RewardType;
+  discountValue: number | null;
+  menuItemId: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  menuItem?: { id: string; name: string } | null;
+};
+
+export type LoyaltyTxType = 'earn' | 'redeem' | 'adjustment' | 'expire';
+
+export type LoyaltyTransaction = {
+  id: string;
+  customerId: string;
+  orderId: string | null;
+  rewardId: string | null;
+  type: LoyaltyTxType;
+  points: number;
+  description: string;
+  createdAt: string;
+  reward?: { id: string; name: string } | null;
+};
+
+export type LoyaltyBalance = {
+  customerId: string;
+  pointsBalance: number;
+  totalEarned: number;
+  totalRedeemed: number;
+  transactions: LoyaltyTransaction[];
 };
 
 export type ReservationStatus =
@@ -196,6 +236,30 @@ export const api = {
 
   home: {
     stats: () => customFetch<HomeStats>(url('/home/stats')),
+  },
+
+  rewards: {
+    list: (params?: { active?: boolean }) => {
+      const qs = new URLSearchParams(params as Record<string, string>).toString();
+      return customFetch<Reward[]>(url(`/rewards${qs ? `?${qs}` : ''}`));
+    },
+    get: (id: string) => customFetch<Reward>(url(`/rewards/${id}`)),
+    create: (body: { name: string; description?: string; pointsCost: number; rewardType: RewardType; discountValue?: number; menuItemId?: string }) =>
+      customFetch<Reward>(url('/rewards'), { method: 'POST', body: JSON.stringify(body) }),
+    update: (id: string, body: Partial<{ name: string; description: string; pointsCost: number; discountValue: number; isActive: boolean }>) =>
+      customFetch<Reward>(url(`/rewards/${id}`), { method: 'PUT', body: JSON.stringify(body) }),
+    delete: (id: string) =>
+      customFetch<{ success: boolean }>(url(`/rewards/${id}`), { method: 'DELETE' }),
+  },
+
+  loyalty: {
+    get: (customerId: string) => customFetch<LoyaltyBalance>(url(`/loyalty/${customerId}`)),
+    earn: (customerId: string, body: { points: number; description: string; orderId?: string }) =>
+      customFetch<LoyaltyTransaction>(url(`/loyalty/${customerId}/earn`), { method: 'POST', body: JSON.stringify(body) }),
+    redeem: (customerId: string, rewardId: string) =>
+      customFetch<LoyaltyTransaction>(url(`/loyalty/${customerId}/redeem`), { method: 'POST', body: JSON.stringify({ rewardId }) }),
+    adjust: (customerId: string, body: { points: number; description: string }) =>
+      customFetch<LoyaltyTransaction>(url(`/loyalty/${customerId}/adjust`), { method: 'POST', body: JSON.stringify(body) }),
   },
 
   reservations: {

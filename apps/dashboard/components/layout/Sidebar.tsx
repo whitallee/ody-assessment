@@ -15,6 +15,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Reservations', href: '/reservations', icon: '📅' },
   { label: 'Menu', href: '/menu', icon: '🍽' },
   { label: 'CRM', href: '/crm', icon: '👥' },
+  { label: 'Rewards', href: '/rewards', icon: '🎁' },
   { label: 'Settings', href: '/settings', icon: '⚙' },
 ];
 

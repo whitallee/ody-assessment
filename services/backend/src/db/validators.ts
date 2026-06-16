@@ -8,8 +8,12 @@ import {
   orderItems,
   settings,
   reservations,
+  rewards,
+  loyaltyTransactions,
   orderStatusEnum,
   reservationStatusEnum,
+  rewardTypeEnum,
+  loyaltyTxTypeEnum,
 } from './schema';
 
 // ─── Menu Categories ──────────────────────────────────────────────────────────
@@ -136,6 +140,8 @@ export const UpdateSettingsSchema = createInsertSchema(settings, {
   restaurantAddress: z.string().max(500).optional().nullable(),
   prepTimeMinutes: z.number().int().min(1).max(120).optional(),
   openingHours: OpeningHoursSchema.optional().nullable(),
+  loyaltyPointsPerDollar: z.number().int().min(1).max(1000).optional(),
+  loyaltyEnabled: z.boolean().optional(),
 }).omit({ id: true, updatedAt: true }).partial();
 
 export type Settings = z.infer<typeof SettingsSchema>;
@@ -171,6 +177,65 @@ export type ReservationWithCustomer = z.infer<typeof ReservationWithCustomerSche
 export type CreateReservation = z.infer<typeof CreateReservationSchema>;
 export type UpdateReservation = z.infer<typeof UpdateReservationSchema>;
 export type UpdateReservationStatus = z.infer<typeof UpdateReservationStatusSchema>;
+
+// ─── Rewards ─────────────────────────────────────────────────────────────────
+
+export const RewardTypeSchema = z.enum(rewardTypeEnum.enumValues);
+
+export const RewardSchema = createSelectSchema(rewards);
+
+export const RewardWithMenuItemSchema = RewardSchema.extend({
+  menuItem: z.object({ id: z.string(), name: z.string() }).nullable(),
+});
+
+export const CreateRewardSchema = createInsertSchema(rewards, {
+  name: z.string().min(1).max(200),
+  description: z.string().max(1000).optional().nullable(),
+  pointsCost: z.number().int().min(1),
+  discountValue: z.number().int().min(0).optional().nullable(),
+}).omit({ id: true, createdAt: true, updatedAt: true });
+
+export const UpdateRewardSchema = CreateRewardSchema.partial();
+
+export type Reward = z.infer<typeof RewardSchema>;
+export type RewardWithMenuItem = z.infer<typeof RewardWithMenuItemSchema>;
+export type CreateReward = z.infer<typeof CreateRewardSchema>;
+
+// ─── Loyalty Transactions ─────────────────────────────────────────────────────
+
+export const LoyaltyTxTypeSchema = z.enum(loyaltyTxTypeEnum.enumValues);
+
+export const LoyaltyTransactionSchema = createSelectSchema(loyaltyTransactions);
+
+export const LoyaltyTransactionWithDetailsSchema = LoyaltyTransactionSchema.extend({
+  reward: z.object({ id: z.string(), name: z.string() }).nullable(),
+});
+
+export const LoyaltyBalanceSchema = z.object({
+  customerId: z.string().uuid(),
+  pointsBalance: z.number().int(),
+  totalEarned: z.number().int(),
+  totalRedeemed: z.number().int(),
+  transactions: z.array(LoyaltyTransactionWithDetailsSchema),
+});
+
+export const EarnPointsSchema = z.object({
+  points: z.number().int().min(1),
+  description: z.string().min(1).max(500),
+  orderId: z.string().uuid().optional(),
+});
+
+export const RedeemRewardSchema = z.object({
+  rewardId: z.string().uuid(),
+});
+
+export const AdjustPointsSchema = z.object({
+  points: z.number().int(),
+  description: z.string().min(1).max(500),
+});
+
+export type LoyaltyTransaction = z.infer<typeof LoyaltyTransactionSchema>;
+export type LoyaltyBalance = z.infer<typeof LoyaltyBalanceSchema>;
 
 // ─── Home / KPIs ─────────────────────────────────────────────────────────────
 

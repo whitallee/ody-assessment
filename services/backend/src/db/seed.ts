@@ -14,6 +14,8 @@ import {
   orderItems,
   settings,
   reservations,
+  rewards,
+  loyaltyTransactions,
 } from './schema';
 
 const db = createDb(process.env.DATABASE_URL!);
@@ -30,6 +32,8 @@ async function seed() {
     prepTimeMinutes: 20,
     autoAcceptOrders: false,
     isOpen: true,
+    loyaltyPointsPerDollar: 10,
+    loyaltyEnabled: true,
     openingHours: {
       monday: { open: '11:00', close: '22:00', isClosed: false },
       tuesday: { open: '11:00', close: '22:00', isClosed: false },
@@ -186,6 +190,56 @@ async function seed() {
     { customerName: 'Lucia Fernandez', customerPhone: '+1 (555) 234-5678', partySize: 4, reservationDate: daysFromNow(-2, 18, 30), status: 'completed', tableNumber: '8', notes: 'Gluten-free options needed' },
   ]);
   console.log('  ✓ Reservations');
+
+  // Rewards
+  await db.delete(loyaltyTransactions);
+  await db.delete(rewards);
+
+  const [freeDesert, tenOff, fifteenPercent, freeStarter, vipSteak] = await db
+    .insert(rewards)
+    .values([
+      { name: 'Free Dessert', description: 'Any dessert on us', pointsCost: 500, rewardType: 'free_item', menuItemId: tiramisu.id, isActive: true },
+      { name: '$10 Off Your Bill', description: '$10 discount on your total', pointsCost: 800, rewardType: 'discount_fixed', discountValue: 1000, isActive: true },
+      { name: '15% Off', description: '15% off your entire order', pointsCost: 1200, rewardType: 'discount_percent', discountValue: 15, isActive: true },
+      { name: 'Free Starter', description: 'Any starter on the house', pointsCost: 400, rewardType: 'free_item', menuItemId: bruschetta.id, isActive: true },
+      { name: 'VIP Ribeye Night', description: 'Free ribeye steak for two loyal visits', pointsCost: 3000, rewardType: 'free_item', menuItemId: steak.id, isActive: true },
+    ])
+    .returning();
+  console.log('  ✓ Rewards');
+
+  // Loyalty transactions
+  const pointsPerDollar = 10;
+  const earn = (totalCents: number, orderId: string, customerId: string, description: string) => ({
+    customerId,
+    orderId,
+    type: 'earn' as const,
+    points: Math.floor((totalCents / 100) * pointsPerDollar),
+    description,
+  });
+
+  await db.insert(loyaltyTransactions).values([
+    // Alice — high spender, enough for a reward
+    earn(order1.totalCents, order1.id, alice.id, `Order #${order1.id.slice(0, 8)} completed`),
+    earn(order6.totalCents, order6.id, alice.id, `Order #${order6.id.slice(0, 8)} completed`),
+    { customerId: alice.id, rewardId: freeDesert.id, type: 'redeem' as const, points: -500, description: 'Redeemed: Free Dessert' },
+    { customerId: alice.id, type: 'adjustment' as const, points: 200, description: 'Welcome bonus' },
+
+    // Bob
+    earn(order2.totalCents, order2.id, bob.id, `Order #${order2.id.slice(0, 8)} completed`),
+    earn(order7.totalCents, order7.id, bob.id, `Order #${order7.id.slice(0, 8)} completed`),
+
+    // Carol
+    earn(order7.totalCents, order7.id, carol.id, `Order #${order7.id.slice(0, 8)} completed`),
+
+    // David
+    earn(order4.totalCents, order4.id, david.id, `Order #${order4.id.slice(0, 8)} completed`),
+    { customerId: david.id, type: 'adjustment' as const, points: 150, description: 'Birthday bonus' },
+
+    // Emma
+    earn(order5.totalCents, order5.id, emma.id, `Order #${order5.id.slice(0, 8)} completed`),
+    { customerId: emma.id, rewardId: tenOff.id, type: 'redeem' as const, points: -800, description: 'Redeemed: $10 Off Your Bill' },
+  ]);
+  console.log('  ✓ Loyalty transactions');
 
   console.log('\n✅ Seed complete!');
 }

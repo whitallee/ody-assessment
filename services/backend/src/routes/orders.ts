@@ -1,7 +1,7 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
 import { eq, desc, and, inArray, sql } from 'drizzle-orm';
 import type { Env } from '../index';
-import { orders, orderItems, menuItems } from '../db/schema';
+import { orders, orderItems, menuItems, loyaltyTransactions, settings } from '../db/schema';
 import { ORDER_TRANSITIONS } from '../db/schema';
 import {
   OrderWithDetailsSchema,
@@ -241,6 +241,25 @@ ordersRoutes.openapi(
       with: { customer: true, items: { with: { menuItem: true } } },
       where: eq(orders.id, updated.id),
     });
+
+    // Auto-earn loyalty points when order completes
+    if (newStatus === 'completed' && fullOrder?.customerId) {
+      const settingsRow = await db.query.settings.findFirst();
+      if (settingsRow?.loyaltyEnabled) {
+        const pointsEarned = Math.floor(
+          (existing.totalCents / 100) * settingsRow.loyaltyPointsPerDollar,
+        );
+        if (pointsEarned > 0) {
+          await db.insert(loyaltyTransactions).values({
+            customerId: fullOrder.customerId,
+            orderId: fullOrder.id,
+            type: 'earn',
+            points: pointsEarned,
+            description: `Order #${fullOrder.id.slice(0, 8)} completed`,
+          });
+        }
+      }
+    }
 
     return c.json(fullOrder!, 200);
   },

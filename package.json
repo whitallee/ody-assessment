@@ -9,6 +9,7 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "build": "turbo run build",
+    "db:generate": "turbo run db:generate --filter=@ody/backend",
     "db:push": "turbo run db:push --filter=@ody/backend",
     "db:migrate": "turbo run db:migrate --filter=@ody/backend",
     "db:studio": "turbo run db:studio --filter=@ody/backend",
