@@ -1,7 +1,18 @@
 import { useState } from 'react';
 import { View, Pressable, StyleSheet, ScrollView as RNScrollView } from 'react-native';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { colors, spacing, fontFamily, fontSize, radius, formatCurrency, formatDate } from '@ody/shared';
+import {
+  useGetCustomers,
+  useGetCustomersId,
+  usePostCustomers,
+  useGetRewards,
+  useGetLoyaltyCustomerId,
+  usePostLoyaltyCustomerIdAdjust,
+  usePostLoyaltyCustomerIdRedeem,
+  getGetCustomersQueryKey,
+  getGetLoyaltyCustomerIdQueryKey,
+} from '@ody/api-client';
 import { PageLayout } from '@/components/layout/PageLayout';
 import { Card } from '@/components/ui/Card';
 import { Typography } from '@/components/ui/Typography';
@@ -11,26 +22,22 @@ import { Input } from '@/components/ui/Input';
 import { OrderStatusBadge } from '@/components/ui/Badge';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
-import { api, type CustomerWithStats, type LoyaltyTransaction, type Reward } from '@/lib/api';
 import { initials } from '@ody/shared';
+import type { CustomerWithStats, CustomerDetail, LoyaltyTransaction, Reward } from '@/lib/types';
 
 type DetailTab = 'overview' | 'loyalty';
 
 export default function CrmPage() {
-  const { data, isLoading } = useQuery({
-    queryKey: ['customers'],
-    queryFn: () => api.customers.list({ limit: 100 }),
-  });
+  const { data: customersResponse, isLoading } = useGetCustomers({ limit: 100 });
+  const customers = (customersResponse?.data.data ?? []) as CustomerWithStats[];
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
 
-  const customers = data?.data ?? [];
-
   return (
     <PageLayout
       title="CRM"
-      subtitle={`${data?.total ?? 0} customers`}
+      subtitle={`${customersResponse?.data.total ?? 0} customers`}
       actions={<Button label="Add Customer" onPress={() => setShowCreate(true)} />}
     >
       <Card padding="none">
@@ -141,10 +148,8 @@ function CustomerDetailModal({
 }) {
   const [tab, setTab] = useState<DetailTab>('overview');
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['customer', customerId],
-    queryFn: () => api.customers.get(customerId),
-  });
+  const { data: customerResponse, isLoading } = useGetCustomersId(customerId);
+  const data = customerResponse?.data as CustomerDetail | undefined;
 
   const TABS: { key: DetailTab; label: string }[] = [
     { key: 'overview', label: 'Overview' },
@@ -193,7 +198,7 @@ function CustomerDetailModal({
   );
 }
 
-function OverviewTab({ data }: { data: ReturnType<typeof api.customers.get> extends Promise<infer T> ? T : never }) {
+function OverviewTab({ data }: { data: CustomerDetail }) {
   return (
     <View style={styles.detailBody}>
       {/* Stats */}
@@ -249,7 +254,7 @@ function OverviewTab({ data }: { data: ReturnType<typeof api.customers.get> exte
                 </Typography>
               </View>
               <View style={{ alignItems: 'flex-end', gap: 4 }}>
-                <OrderStatusBadge status={order.status} size="sm" />
+                <OrderStatusBadge status={order.status as never} size="sm" />
                 <Typography variant="bodySemiBold">
                   {formatCurrency(order.totalCents)}
                 </Typography>
@@ -270,25 +275,20 @@ function LoyaltyTab({ customerId }: { customerId: string }) {
   const [adjustPoints, setAdjustPoints] = useState('');
   const [adjustDesc, setAdjustDesc] = useState('');
 
-  const { data: loyalty, isLoading } = useQuery({
-    queryKey: ['loyalty', customerId],
-    queryFn: () => api.loyalty.get(customerId),
-  });
+  const { data: loyaltyResponse, isLoading } = useGetLoyaltyCustomerId(customerId);
+  const loyalty = loyaltyResponse?.data;
 
-  const adjust = useMutation({
-    mutationFn: () =>
-      api.loyalty.adjust(customerId, {
-        points: parseInt(adjustPoints, 10),
-        description: adjustDesc || 'Manual adjustment',
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['loyalty', customerId] });
-      toast('Points adjusted', 'success');
-      setAdjustPoints('');
-      setAdjustDesc('');
-      setShowAdjust(false);
+  const adjust = usePostLoyaltyCustomerIdAdjust({
+    mutation: {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getGetLoyaltyCustomerIdQueryKey(customerId) });
+        toast('Points adjusted', 'success');
+        setAdjustPoints('');
+        setAdjustDesc('');
+        setShowAdjust(false);
+      },
+      onError: (err: Error) => toast(err.message, 'error'),
     },
-    onError: (err: Error) => toast(err.message, 'error'),
   });
 
   if (isLoading) {
@@ -378,7 +378,13 @@ function LoyaltyTab({ customerId }: { customerId: string }) {
                     toast('Enter a valid number', 'error');
                     return;
                   }
-                  adjust.mutate();
+                  adjust.mutate({
+                    customerId,
+                    data: {
+                      points: parseInt(adjustPoints, 10),
+                      description: adjustDesc || 'Manual adjustment',
+                    },
+                  });
                 }}
                 loading={adjust.isPending}
               />
@@ -398,7 +404,7 @@ function LoyaltyTab({ customerId }: { customerId: string }) {
           </View>
         ) : (
           loyalty.transactions.map((tx) => (
-            <TxRow key={tx.id} tx={tx} />
+            <TxRow key={tx.id} tx={tx as unknown as LoyaltyTransaction} />
           ))
         )}
       </View>
@@ -418,19 +424,18 @@ function RedeemPanel({
   const qc = useQueryClient();
   const { toast } = useToast();
 
-  const { data: rewards = [], isLoading } = useQuery({
-    queryKey: ['rewards', 'active'],
-    queryFn: () => api.rewards.list({ active: true }),
-  });
+  const { data: rewardsResponse, isLoading } = useGetRewards({ active: true });
+  const rewards = (rewardsResponse?.data ?? []) as Reward[];
 
-  const redeem = useMutation({
-    mutationFn: (rewardId: string) => api.loyalty.redeem(customerId, rewardId),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['loyalty', customerId] });
-      toast('Reward redeemed!', 'success');
-      onClose();
+  const redeem = usePostLoyaltyCustomerIdRedeem({
+    mutation: {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getGetLoyaltyCustomerIdQueryKey(customerId) });
+        toast('Reward redeemed!', 'success');
+        onClose();
+      },
+      onError: (err: Error) => toast(err.message, 'error'),
     },
-    onError: (err: Error) => toast(err.message, 'error'),
   });
 
   return (
@@ -453,7 +458,7 @@ function RedeemPanel({
               <Pressable
                 key={reward.id}
                 disabled={!canAfford || redeem.isPending}
-                onPress={() => redeem.mutate(reward.id)}
+                onPress={() => redeem.mutate({ customerId, data: { rewardId: reward.id } })}
                 style={[styles.rewardOption, !canAfford && styles.rewardOptionDisabled]}
               >
                 <View style={{ flex: 1 }}>
@@ -486,7 +491,7 @@ const TX_TYPE_CONFIG = {
 };
 
 function TxRow({ tx }: { tx: LoyaltyTransaction }) {
-  const cfg = TX_TYPE_CONFIG[tx.type] ?? TX_TYPE_CONFIG.adjustment;
+  const cfg = TX_TYPE_CONFIG[tx.type as keyof typeof TX_TYPE_CONFIG] ?? TX_TYPE_CONFIG.adjustment;
   const isPositive = tx.points > 0;
   const signedPoints = isPositive ? `+${tx.points.toLocaleString()}` : tx.points.toLocaleString();
 
@@ -519,15 +524,16 @@ function AddCustomerModal({ visible, onClose }: { visible: boolean; onClose: () 
   const [phone, setPhone] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const create = useMutation({
-    mutationFn: () => api.customers.create({ name, email: email || undefined, phone: phone || undefined }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['customers'] });
-      toast('Customer added', 'success');
-      setName(''); setEmail(''); setPhone('');
-      onClose();
+  const create = usePostCustomers({
+    mutation: {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getGetCustomersQueryKey() });
+        toast('Customer added', 'success');
+        setName(''); setEmail(''); setPhone('');
+        onClose();
+      },
+      onError: (err: Error) => toast(err.message, 'error'),
     },
-    onError: (err: Error) => toast(err.message, 'error'),
   });
 
   function validate() {
@@ -547,7 +553,10 @@ function AddCustomerModal({ visible, onClose }: { visible: boolean; onClose: () 
       footer={
         <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 12 }}>
           <Button label="Cancel" variant="ghost" onPress={onClose} />
-          <Button label="Add Customer" onPress={() => { if (validate()) create.mutate(); }} loading={create.isPending} />
+          <Button label="Add Customer" onPress={() => {
+            if (!validate()) return;
+            create.mutate({ data: { name, email: email || undefined, phone: phone || undefined } });
+          }} loading={create.isPending} />
         </View>
       }
     >
@@ -684,77 +693,21 @@ const styles = StyleSheet.create({
     borderColor: colors.brand[100],
   },
   balanceBig: {
-    fontFamily: fontFamily.display,
+    fontFamily: fontFamily.displayBold,
     fontSize: 32,
     color: colors.brand[700],
-    lineHeight: 38,
+    lineHeight: 36,
   },
   loyaltyActions: {
     flexDirection: 'row',
-    gap: spacing[3],
+    gap: spacing[2],
   },
-
-  // Adjust form
   adjustForm: {
     backgroundColor: colors.neutral[50],
     borderRadius: 10,
     padding: spacing[4],
     borderWidth: 1,
     borderColor: colors.neutral[200],
-  },
-
-  // Redeem panel
-  redeemPanel: {
-    backgroundColor: colors.neutral[50],
-    borderRadius: 10,
-    padding: spacing[4],
-    borderWidth: 1,
-    borderColor: colors.brand[100],
-    gap: spacing[3],
-  },
-  redeemHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  redeemClose: {
-    fontSize: 14,
-    color: colors.neutral[500],
-    fontFamily: fontFamily.body,
-  },
-  rewardOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: spacing[3],
-    paddingHorizontal: spacing[3],
-    borderBottomWidth: 1,
-    borderBottomColor: colors.neutral[100],
-    gap: spacing[3],
-    borderRadius: radius.md,
-  },
-  rewardOptionDisabled: { opacity: 0.5 },
-  costBadge: {
-    backgroundColor: colors.brand[50],
-    paddingVertical: 3,
-    paddingHorizontal: 10,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: colors.brand[100],
-  },
-  costBadgeDisabled: {
-    backgroundColor: colors.neutral[100],
-    borderColor: colors.neutral[200],
-  },
-  costText: {
-    fontSize: 12,
-    fontFamily: fontFamily.bodySemiBold,
-    color: colors.brand[700],
-  },
-
-  // Transaction rows
-  txEmpty: {
-    paddingVertical: spacing[5],
-    alignItems: 'center',
   },
   txRow: {
     flexDirection: 'row',
@@ -766,17 +719,60 @@ const styles = StyleSheet.create({
   },
   txTypePill: {
     paddingVertical: 3,
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     borderRadius: 20,
   },
   txTypeText: {
     fontSize: 11,
-    fontFamily: fontFamily.bodySemiBold,
+    fontFamily: 'Inter_600SemiBold',
   },
   txPoints: {
-    fontFamily: fontFamily.bodySemiBold,
-    fontSize: fontSize.sm,
+    fontFamily: 'Inter_700Bold',
+    fontSize: 15,
     minWidth: 60,
     textAlign: 'right',
+  },
+  txEmpty: {
+    padding: spacing[4],
+    alignItems: 'center',
+  },
+  redeemPanel: {
+    backgroundColor: colors.neutral[50],
+    borderRadius: 10,
+    padding: spacing[4],
+    gap: spacing[3],
+    borderWidth: 1,
+    borderColor: colors.neutral[200],
+  },
+  redeemHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  redeemClose: {
+    fontSize: 16,
+    color: colors.neutral[400],
+    padding: 4,
+  },
+  rewardOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing[3],
+    borderBottomWidth: 1,
+    borderBottomColor: colors.neutral[100],
+    gap: spacing[3],
+  },
+  rewardOptionDisabled: { opacity: 0.5 },
+  costBadge: {
+    backgroundColor: colors.brand[50],
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 20,
+  },
+  costBadgeDisabled: { backgroundColor: colors.neutral[100] },
+  costText: {
+    fontSize: 12,
+    fontFamily: 'Inter_700Bold',
+    color: colors.brand[700],
   },
 });

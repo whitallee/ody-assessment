@@ -1,7 +1,13 @@
 import { useState, useEffect } from 'react';
 import { View, ScrollView, Switch, StyleSheet } from 'react-native';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { colors, spacing } from '@ody/shared';
+import {
+  useGetSettings,
+  usePutSettings,
+  getGetSettingsQueryKey,
+  type PutSettingsBody,
+} from '@ody/api-client';
 import { PageLayout, Section } from '@/components/layout/PageLayout';
 import { Card } from '@/components/ui/Card';
 import { Typography } from '@/components/ui/Typography';
@@ -9,7 +15,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
-import { api, type Settings } from '@/lib/api';
+import type { Settings } from '@/lib/types';
 
 const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const;
 const DAY_LABELS: Record<(typeof DAYS)[number], string> = {
@@ -26,20 +32,18 @@ export default function SettingsPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['settings'],
-    queryFn: api.settings.get,
-  });
+  const { data: settingsResponse, isLoading } = useGetSettings();
+  const serverData = settingsResponse?.data as Settings | undefined;
 
   const [form, setForm] = useState<Partial<Settings>>({});
   const [dirty, setDirty] = useState(false);
 
   useEffect(() => {
-    if (data) {
-      setForm(data);
+    if (serverData) {
+      setForm(serverData);
       setDirty(false);
     }
-  }, [data]);
+  }, [serverData]);
 
   function update<K extends keyof Settings>(key: K, value: Settings[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -65,14 +69,15 @@ export default function SettingsPage() {
     setDirty(true);
   }
 
-  const save = useMutation({
-    mutationFn: () => api.settings.update(form),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['settings'] });
-      setDirty(false);
-      toast('Settings saved', 'success');
+  const save = usePutSettings({
+    mutation: {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getGetSettingsQueryKey() });
+        setDirty(false);
+        toast('Settings saved', 'success');
+      },
+      onError: (err: Error) => toast(err.message, 'error'),
     },
-    onError: (err: Error) => toast(err.message, 'error'),
   });
 
   if (isLoading) {
@@ -101,7 +106,7 @@ export default function SettingsPage() {
         dirty && (
           <Button
             label="Save Changes"
-            onPress={() => save.mutate()}
+            onPress={() => save.mutate({ data: form as unknown as PutSettingsBody })}
             loading={save.isPending}
           />
         )
@@ -232,11 +237,11 @@ export default function SettingsPage() {
             <Button
               label="Discard"
               variant="ghost"
-              onPress={() => { if (data) { setForm(data); setDirty(false); } }}
+              onPress={() => { if (serverData) { setForm(serverData); setDirty(false); } }}
             />
             <Button
               label="Save Changes"
-              onPress={() => save.mutate()}
+              onPress={() => save.mutate({ data: form as unknown as PutSettingsBody })}
               loading={save.isPending}
             />
           </View>

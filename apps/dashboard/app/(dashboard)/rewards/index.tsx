@@ -1,7 +1,15 @@
 import { useState } from 'react';
 import { View, Pressable, StyleSheet } from 'react-native';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { colors, spacing, formatCurrency } from '@ody/shared';
+import {
+  useGetRewards,
+  useGetSettings,
+  usePostRewards,
+  usePutRewardsId,
+  useDeleteRewardsId,
+  getGetRewardsQueryKey,
+} from '@ody/api-client';
 import { PageLayout } from '@/components/layout/PageLayout';
 import { Card } from '@/components/ui/Card';
 import { Typography } from '@/components/ui/Typography';
@@ -10,9 +18,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Input';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
-import { api, type Reward } from '@/lib/api';
-
-type RewardType = 'discount_percent' | 'discount_fixed' | 'free_item';
+import type { Reward, RewardType } from '@/lib/types';
 
 const REWARD_TYPE_LABELS: Record<RewardType, string> = {
   discount_percent: '% Discount',
@@ -30,10 +36,8 @@ export default function RewardsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [editReward, setEditReward] = useState<Reward | null>(null);
 
-  const { data: rewards = [], isLoading } = useQuery({
-    queryKey: ['rewards'],
-    queryFn: () => api.rewards.list(),
-  });
+  const { data: rewardsResponse, isLoading } = useGetRewards();
+  const rewards = (rewardsResponse?.data ?? []) as Reward[];
 
   const active = rewards.filter((r) => r.isActive);
   const inactive = rewards.filter((r) => !r.isActive);
@@ -88,10 +92,8 @@ export default function RewardsPage() {
 }
 
 function EarnRateCard() {
-  const { data: settings } = useQuery({
-    queryKey: ['settings'],
-    queryFn: api.settings.get,
-  });
+  const { data: settingsResponse } = useGetSettings();
+  const settings = settingsResponse?.data;
 
   return (
     <Card variant="elevated" style={styles.earnCard}>
@@ -129,13 +131,14 @@ function RewardCard({ reward, onEdit }: { reward: Reward; onEdit: () => void }) 
   const qc = useQueryClient();
   const { toast } = useToast();
 
-  const toggle = useMutation({
-    mutationFn: () => api.rewards.update(reward.id, { isActive: !reward.isActive }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['rewards'] });
-      toast(reward.isActive ? 'Reward deactivated' : 'Reward activated', 'success');
+  const toggle = usePutRewardsId({
+    mutation: {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getGetRewardsQueryKey() });
+        toast(reward.isActive ? 'Reward deactivated' : 'Reward activated', 'success');
+      },
+      onError: (err: Error) => toast(err.message, 'error'),
     },
-    onError: (err: Error) => toast(err.message, 'error'),
   });
 
   const typeColor = REWARD_TYPE_COLORS[reward.rewardType as RewardType] ?? colors.neutral[400];
@@ -171,7 +174,7 @@ function RewardCard({ reward, onEdit }: { reward: Reward; onEdit: () => void }) 
           label={reward.isActive ? 'Deactivate' : 'Activate'}
           size="sm"
           variant="outline"
-          onPress={() => toggle.mutate()}
+          onPress={() => toggle.mutate({ id: reward.id, data: { isActive: !reward.isActive } })}
           loading={toggle.isPending}
         />
       </View>
@@ -189,22 +192,16 @@ function CreateRewardModal({ visible, onClose }: { visible: boolean; onClose: ()
   const [discountValue, setDiscountValue] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const create = useMutation({
-    mutationFn: () =>
-      api.rewards.create({
-        name,
-        description: description || undefined,
-        pointsCost: parseInt(pointsCost, 10),
-        rewardType,
-        discountValue: discountValue ? parseInt(discountValue, 10) : undefined,
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['rewards'] });
-      toast('Reward created', 'success');
-      setName(''); setDescription(''); setPointsCost(''); setDiscountValue('');
-      onClose();
+  const create = usePostRewards({
+    mutation: {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getGetRewardsQueryKey() });
+        toast('Reward created', 'success');
+        setName(''); setDescription(''); setPointsCost(''); setDiscountValue('');
+        onClose();
+      },
+      onError: (err: Error) => toast(err.message, 'error'),
     },
-    onError: (err: Error) => toast(err.message, 'error'),
   });
 
   function validate() {
@@ -230,7 +227,18 @@ function CreateRewardModal({ visible, onClose }: { visible: boolean; onClose: ()
       footer={
         <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 12 }}>
           <Button label="Cancel" variant="ghost" onPress={onClose} />
-          <Button label="Create Reward" onPress={() => { if (validate()) create.mutate(); }} loading={create.isPending} />
+          <Button label="Create Reward" onPress={() => {
+            if (!validate()) return;
+            create.mutate({
+              data: {
+                name,
+                description: description || undefined,
+                pointsCost: parseInt(pointsCost, 10),
+                rewardType,
+                discountValue: discountValue ? parseInt(discountValue, 10) : undefined,
+              },
+            });
+          }} loading={create.isPending} />
         </View>
       }
     >
@@ -278,30 +286,26 @@ function EditRewardModal({ reward, onClose }: { reward: Reward; onClose: () => v
   const [pointsCost, setPointsCost] = useState(String(reward.pointsCost));
   const [discountValue, setDiscountValue] = useState(String(reward.discountValue ?? ''));
 
-  const update = useMutation({
-    mutationFn: () =>
-      api.rewards.update(reward.id, {
-        name,
-        description: description || undefined,
-        pointsCost: parseInt(pointsCost, 10),
-        discountValue: discountValue ? parseInt(discountValue, 10) : undefined,
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['rewards'] });
-      toast('Reward updated', 'success');
-      onClose();
+  const update = usePutRewardsId({
+    mutation: {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getGetRewardsQueryKey() });
+        toast('Reward updated', 'success');
+        onClose();
+      },
+      onError: (err: Error) => toast(err.message, 'error'),
     },
-    onError: (err: Error) => toast(err.message, 'error'),
   });
 
-  const del = useMutation({
-    mutationFn: () => api.rewards.delete(reward.id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['rewards'] });
-      toast('Reward deleted', 'success');
-      onClose();
+  const del = useDeleteRewardsId({
+    mutation: {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getGetRewardsQueryKey() });
+        toast('Reward deleted', 'success');
+        onClose();
+      },
+      onError: (err: Error) => toast(err.message, 'error'),
     },
-    onError: (err: Error) => toast(err.message, 'error'),
   });
 
   return (
@@ -312,10 +316,18 @@ function EditRewardModal({ reward, onClose }: { reward: Reward; onClose: () => v
       width={480}
       footer={
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
-          <Button label="Delete" variant="ghost" onPress={() => del.mutate()} loading={del.isPending} />
+          <Button label="Delete" variant="ghost" onPress={() => del.mutate({ id: reward.id })} loading={del.isPending} />
           <View style={{ flexDirection: 'row', gap: 12 }}>
             <Button label="Cancel" variant="ghost" onPress={onClose} />
-            <Button label="Save" onPress={() => update.mutate()} loading={update.isPending} />
+            <Button label="Save" onPress={() => update.mutate({
+              id: reward.id,
+              data: {
+                name,
+                description: description || undefined,
+                pointsCost: parseInt(pointsCost, 10),
+                discountValue: discountValue ? parseInt(discountValue, 10) : undefined,
+              },
+            })} loading={update.isPending} />
           </View>
         </View>
       }

@@ -31,5 +31,6 @@ export async function customFetch<T>(
   }
 
   const text = await response.text();
-  return text ? (JSON.parse(text) as T) : (undefined as T);
+  const body = text ? JSON.parse(text) : undefined;
+  return { data: body, status: response.status, headers: response.headers } as T;
 }

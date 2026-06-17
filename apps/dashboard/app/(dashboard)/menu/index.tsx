@@ -1,7 +1,17 @@
 import { useState } from 'react';
 import { View, ScrollView, Pressable, StyleSheet, Switch } from 'react-native';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { colors, spacing, formatCurrency } from '@ody/shared';
+import {
+  useGetMenuCategories,
+  useGetMenuItems,
+  usePostMenuCategories,
+  usePostMenuItems,
+  usePutMenuItemsId,
+  useDeleteMenuItemsId,
+  getGetMenuCategoriesQueryKey,
+  getGetMenuItemsQueryKey,
+} from '@ody/api-client';
 import { PageLayout, Section } from '@/components/layout/PageLayout';
 import { Card } from '@/components/ui/Card';
 import { Typography } from '@/components/ui/Typography';
@@ -11,7 +21,9 @@ import { Input } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
-import { api, type MenuCategory, type MenuItemWithCategory } from '@/lib/api';
+import type { MenuCategory, MenuItem } from '@/lib/types';
+
+type MenuItemWithCategory = MenuItem & { category: MenuCategory };
 
 export default function MenuPage() {
   const qc = useQueryClient();
@@ -22,37 +34,36 @@ export default function MenuPage() {
   const [showCreateCategory, setShowCreateCategory] = useState(false);
   const [deleteItem, setDeleteItem] = useState<MenuItemWithCategory | null>(null);
 
-  const { data: categories, isLoading: catsLoading } = useQuery({
-    queryKey: ['menu-categories'],
-    queryFn: api.menuCategories.list,
-  });
+  const { data: catsResponse, isLoading: catsLoading } = useGetMenuCategories();
+  const categories = catsResponse?.data ?? [];
 
-  const { data: items, isLoading: itemsLoading } = useQuery({
-    queryKey: ['menu-items', activeCategoryId],
-    queryFn: () => api.menuItems.list(activeCategoryId ? { categoryId: activeCategoryId } : undefined),
-  });
+  const { data: itemsResponse, isLoading: itemsLoading } = useGetMenuItems(
+    activeCategoryId ? { categoryId: activeCategoryId } : undefined,
+  );
+  const items = (itemsResponse?.data ?? []) as MenuItemWithCategory[];
 
-  const toggleAvailability = useMutation({
-    mutationFn: ({ id, isAvailable }: { id: string; isAvailable: boolean }) =>
-      api.menuItems.update(id, { isAvailable }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['menu-items'] }),
-    onError: (err: Error) => toast(err.message, 'error'),
-  });
-
-  const deleteMenuItem = useMutation({
-    mutationFn: (id: string) => api.menuItems.delete(id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['menu-items'] });
-      setDeleteItem(null);
-      toast('Item deleted', 'success');
+  const toggleAvailability = usePutMenuItemsId({
+    mutation: {
+      onSuccess: () => qc.invalidateQueries({ queryKey: getGetMenuItemsQueryKey() }),
+      onError: (err: Error) => toast(err.message, 'error'),
     },
-    onError: (err: Error) => toast(err.message, 'error'),
+  });
+
+  const deleteMenuItem = useDeleteMenuItemsId({
+    mutation: {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getGetMenuItemsQueryKey() });
+        setDeleteItem(null);
+        toast('Item deleted', 'success');
+      },
+      onError: (err: Error) => toast(err.message, 'error'),
+    },
   });
 
   return (
     <PageLayout
       title="Menu"
-      subtitle={`${items?.length ?? 0} items`}
+      subtitle={`${items.length} items`}
       actions={
         <View style={{ flexDirection: 'row', gap: spacing[3] }}>
           <Button label="Add Category" variant="secondary" onPress={() => setShowCreateCategory(true)} />
@@ -83,7 +94,7 @@ export default function MenuPage() {
                   <Skeleton width="80%" height={14} />
                 </View>
               ))
-            : categories?.map((cat) => (
+            : categories.map((cat) => (
                 <Pressable
                   key={cat.id}
                   style={({ hovered }: { hovered?: boolean }) => [
@@ -122,17 +133,17 @@ export default function MenuPage() {
                   <Skeleton height={20} width="30%" />
                 </Card>
               ))
-            : items?.map((item) => (
+            : items.map((item) => (
                 <MenuItemCard
                   key={item.id}
                   item={item}
                   onEdit={() => setEditItem(item)}
-                  onToggle={(v) => toggleAvailability.mutate({ id: item.id, isAvailable: v })}
+                  onToggle={(v) => toggleAvailability.mutate({ id: item.id, data: { isAvailable: v } })}
                   onDelete={() => setDeleteItem(item)}
                 />
               ))}
 
-          {!itemsLoading && items?.length === 0 && (
+          {!itemsLoading && items.length === 0 && (
             <View style={styles.empty}>
               <Typography variant="heading4" color="secondary">No items</Typography>
               <Typography variant="body" color="tertiary">
@@ -150,11 +161,11 @@ export default function MenuPage() {
       <MenuItemModal
         visible={showCreateItem || !!editItem}
         item={editItem}
-        categories={categories ?? []}
+        categories={categories}
         defaultCategoryId={activeCategoryId ?? undefined}
         onClose={() => { setShowCreateItem(false); setEditItem(null); }}
         onSaved={() => {
-          qc.invalidateQueries({ queryKey: ['menu-items'] });
+          qc.invalidateQueries({ queryKey: getGetMenuItemsQueryKey() });
           setShowCreateItem(false);
           setEditItem(null);
           toast(editItem ? 'Item updated' : 'Item created', 'success');
@@ -165,7 +176,7 @@ export default function MenuPage() {
         visible={showCreateCategory}
         onClose={() => setShowCreateCategory(false)}
         onSaved={() => {
-          qc.invalidateQueries({ queryKey: ['menu-categories'] });
+          qc.invalidateQueries({ queryKey: getGetMenuCategoriesQueryKey() });
           setShowCreateCategory(false);
           toast('Category created', 'success');
         }}
@@ -174,7 +185,7 @@ export default function MenuPage() {
       <ConfirmModal
         visible={!!deleteItem}
         onClose={() => setDeleteItem(null)}
-        onConfirm={() => deleteItem && deleteMenuItem.mutate(deleteItem.id)}
+        onConfirm={() => deleteItem && deleteMenuItem.mutate({ id: deleteItem.id })}
         title="Delete Item"
         message={`Are you sure you want to delete "${deleteItem?.name}"? This cannot be undone.`}
         confirmLabel="Delete"
@@ -256,22 +267,11 @@ function MenuItemModal({
   const [catId, setCatId] = useState(item?.categoryId ?? defaultCategoryId ?? categories[0]?.id ?? '');
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const save = useMutation({
-    mutationFn: () => {
-      const priceCents = Math.round(parseFloat(price) * 100);
-      const body = {
-        name,
-        description: desc || undefined,
-        priceCents,
-        categoryId: catId,
-        prepTimeMinutes: parseInt(prep, 10) || 15,
-      };
-      return item
-        ? api.menuItems.update(item.id, body)
-        : api.menuItems.create(body);
-    },
-    onSuccess: onSaved,
-    onError: (err: Error) => toast(err.message, 'error'),
+  const createItem = usePostMenuItems({
+    mutation: { onSuccess: onSaved, onError: (err: Error) => toast(err.message, 'error') },
+  });
+  const updateItem = usePutMenuItemsId({
+    mutation: { onSuccess: onSaved, onError: (err: Error) => toast(err.message, 'error') },
   });
 
   function validate() {
@@ -283,6 +283,25 @@ function MenuItemModal({
     return Object.keys(e).length === 0;
   }
 
+  function handleSave() {
+    if (!validate()) return;
+    const priceCents = Math.round(parseFloat(price) * 100);
+    const body = {
+      name,
+      description: desc || undefined,
+      priceCents,
+      categoryId: catId,
+      prepTimeMinutes: parseInt(prep, 10) || 15,
+    };
+    if (item) {
+      updateItem.mutate({ id: item.id, data: body });
+    } else {
+      createItem.mutate({ data: body });
+    }
+  }
+
+  const isSaving = createItem.isPending || updateItem.isPending;
+
   return (
     <Modal
       visible={visible}
@@ -292,7 +311,7 @@ function MenuItemModal({
       footer={
         <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 12 }}>
           <Button label="Cancel" variant="ghost" onPress={onClose} />
-          <Button label={item ? 'Save Changes' : 'Create Item'} onPress={() => { if (validate()) save.mutate(); }} loading={save.isPending} />
+          <Button label={item ? 'Save Changes' : 'Create Item'} onPress={handleSave} loading={isSaving} />
         </View>
       }
     >
@@ -349,10 +368,11 @@ function CreateCategoryModal({
   const [desc, setDesc] = useState('');
   const [error, setError] = useState('');
 
-  const create = useMutation({
-    mutationFn: () => api.menuCategories.create({ name, description: desc || undefined }),
-    onSuccess: () => { setName(''); setDesc(''); onSaved(); },
-    onError: (err: Error) => toast(err.message, 'error'),
+  const create = usePostMenuCategories({
+    mutation: {
+      onSuccess: () => { setName(''); setDesc(''); onSaved(); },
+      onError: (err: Error) => toast(err.message, 'error'),
+    },
   });
 
   return (
@@ -366,7 +386,7 @@ function CreateCategoryModal({
           <Button label="Cancel" variant="ghost" onPress={onClose} />
           <Button label="Create Category" onPress={() => {
             if (!name.trim()) { setError('Name is required'); return; }
-            create.mutate();
+            create.mutate({ data: { name, description: desc || undefined } });
           }} loading={create.isPending} />
         </View>
       }

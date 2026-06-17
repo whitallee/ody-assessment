@@ -157,7 +157,7 @@ apps/
       ui/                 # Button, Card, Input, Select, Modal, Badge, Skeleton, Toast
       layout/             # Sidebar, PageLayout
     lib/
-      api.ts              # Typed API layer (stopgap until Orval hooks fully wired)
+      types.ts            # Shared type aliases re-exported from @ody/api-client
     __tests__/            # Jest utility tests
 
 services/
@@ -269,13 +269,11 @@ pnpm exec wrangler pages deploy apps/dashboard/dist --project-name ody-dashboard
 
 ### Known rough edges
 
-- Dashboard pages use the hand-written `lib/api.ts` layer rather than Orval-generated hooks. The generated hooks exist in `packages/api-client/src/generated/` and are exported — wiring them in is mechanical but not done for all pages.
 - `db:push` is used for schema sync rather than versioned migrations. Fast for development; a production app should use `db:generate` + `db:migrate`.
 - Wrangler local dev reads from `.dev.vars`. First-time setup requires creating that file manually (see step 2 above).
 
 ### What I'd add with more time
 
-- Wire Orval-generated React Query hooks into all dashboard pages
 - E2E tests with Playwright
 - Optimistic updates on order status changes
 - Real-time order updates via Cloudflare Durable Objects or SSE

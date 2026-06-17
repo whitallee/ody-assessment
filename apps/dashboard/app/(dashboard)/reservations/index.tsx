@@ -1,7 +1,13 @@
 import { useState } from 'react';
 import { View, Pressable, StyleSheet } from 'react-native';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { colors, spacing, formatDate } from '@ody/shared';
+import {
+  useGetReservations,
+  usePatchReservationsIdStatus,
+  usePostReservations,
+  getGetReservationsQueryKey,
+} from '@ody/api-client';
 import { PageLayout } from '@/components/layout/PageLayout';
 import { Card } from '@/components/ui/Card';
 import { Typography } from '@/components/ui/Typography';
@@ -11,7 +17,7 @@ import { Input } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
-import { api, type Reservation, type ReservationStatus } from '@/lib/api';
+import type { Reservation, ReservationStatus } from '@/lib/types';
 
 const STATUS_FILTERS: { label: string; value: ReservationStatus | 'all' }[] = [
   { label: 'All', value: 'all' },
@@ -53,19 +59,16 @@ export default function ReservationsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['reservations', statusFilter],
-    queryFn: () =>
-      api.reservations.list(statusFilter !== 'all' ? { status: statusFilter } : {}),
-  });
-
-  const reservations: Reservation[] = (data?.data ?? []) as Reservation[];
+  const { data: resResponse, isLoading } = useGetReservations(
+    statusFilter !== 'all' ? { status: statusFilter } : undefined,
+  );
+  const reservations = (resResponse?.data.data ?? []) as Reservation[];
   const selected = reservations.find((r) => r.id === selectedId) ?? null;
 
   return (
     <PageLayout
       title="Reservations"
-      subtitle={`${data?.total ?? 0} total`}
+      subtitle={`${resResponse?.data.total ?? 0} total`}
       actions={<Button label="New Reservation" onPress={() => setShowCreate(true)} />}
     >
       {/* Status filter tabs */}
@@ -164,7 +167,7 @@ function ReservationRow({
         {r.tableNumber ?? '—'}
       </Typography>
       <View style={styles.td}>
-        <ReservationBadge status={r.status} />
+        <ReservationBadge status={r.status as ReservationStatus} />
       </View>
       <Button label="View" size="sm" variant="ghost" onPress={onSelect} />
     </Pressable>
@@ -199,18 +202,18 @@ function ReservationDetailModal({
   const qc = useQueryClient();
   const { toast } = useToast();
 
-  const updateStatus = useMutation({
-    mutationFn: (status: ReservationStatus) =>
-      api.reservations.updateStatus(reservation.id, status),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['reservations'] });
-      toast('Status updated', 'success');
-      onClose();
+  const updateStatus = usePatchReservationsIdStatus({
+    mutation: {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getGetReservationsQueryKey() });
+        toast('Status updated', 'success');
+        onClose();
+      },
+      onError: (err: Error) => toast(err.message, 'error'),
     },
-    onError: (err: Error) => toast(err.message, 'error'),
   });
 
-  const actions = NEXT_ACTIONS[reservation.status];
+  const actions = NEXT_ACTIONS[reservation.status as ReservationStatus];
 
   return (
     <Modal
@@ -225,7 +228,7 @@ function ReservationDetailModal({
               key={a.status}
               label={a.label}
               variant={a.status === 'cancelled' || a.status === 'no_show' ? 'ghost' : 'primary'}
-              onPress={() => updateStatus.mutate(a.status)}
+              onPress={() => updateStatus.mutate({ id: reservation.id, data: { status: a.status } })}
               loading={updateStatus.isPending}
             />
           ))}
@@ -241,7 +244,7 @@ function ReservationDetailModal({
           </View>
           <View style={styles.stat}>
             <Typography variant="overline">Status</Typography>
-            <ReservationBadge status={reservation.status} />
+            <ReservationBadge status={reservation.status as ReservationStatus} />
           </View>
           {reservation.tableNumber && (
             <View style={styles.stat}>
@@ -292,26 +295,17 @@ function CreateReservationModal({ visible, onClose }: { visible: boolean; onClos
   const [notes, setNotes] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const create = useMutation({
-    mutationFn: () => {
-      const reservationDate = new Date(`${date}T${time}:00`).toISOString();
-      return api.reservations.create({
-        customerName: name,
-        customerPhone: phone || undefined,
-        partySize: parseInt(partySize, 10),
-        reservationDate,
-        tableNumber: tableNumber || undefined,
-        notes: notes || undefined,
-      });
+  const create = usePostReservations({
+    mutation: {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getGetReservationsQueryKey() });
+        toast('Reservation created', 'success');
+        setName(''); setPhone(''); setPartySize('2'); setDate(''); setTime('19:00');
+        setTableNumber(''); setNotes('');
+        onClose();
+      },
+      onError: (err: Error) => toast(err.message, 'error'),
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['reservations'] });
-      toast('Reservation created', 'success');
-      setName(''); setPhone(''); setPartySize('2'); setDate(''); setTime('19:00');
-      setTableNumber(''); setNotes('');
-      onClose();
-    },
-    onError: (err: Error) => toast(err.message, 'error'),
   });
 
   function validate() {
@@ -335,7 +329,20 @@ function CreateReservationModal({ visible, onClose }: { visible: boolean; onClos
           <Button label="Cancel" variant="ghost" onPress={onClose} />
           <Button
             label="Create Reservation"
-            onPress={() => { if (validate()) create.mutate(); }}
+            onPress={() => {
+              if (!validate()) return;
+              const reservationDate = new Date(`${date}T${time}:00`).toISOString();
+              create.mutate({
+                data: {
+                  customerName: name,
+                  customerPhone: phone || undefined,
+                  partySize: parseInt(partySize, 10),
+                  reservationDate,
+                  tableNumber: tableNumber || undefined,
+                  notes: notes || undefined,
+                },
+              });
+            }}
             loading={create.isPending}
           />
         </View>

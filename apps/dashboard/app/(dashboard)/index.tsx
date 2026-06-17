@@ -1,19 +1,21 @@
 import { View, StyleSheet } from 'react-native';
-import { useQuery } from '@tanstack/react-query';
 import { colors, spacing, formatCurrency, formatRelativeTime } from '@ody/shared';
+import {
+  useGetHomeStats,
+  type GetHomeStats200RecentOrdersItem,
+  type GetHomeStats200UpcomingReservationsItem,
+} from '@ody/api-client';
 import { PageLayout, Section, Grid } from '@/components/layout/PageLayout';
 import { Card } from '@/components/ui/Card';
 import { Typography } from '@/components/ui/Typography';
 import { OrderStatusBadge } from '@/components/ui/Badge';
 import { Skeleton, SkeletonCard } from '@/components/ui/Skeleton';
-import { api, type HomeStats, type OrderWithDetails, type Reservation } from '@/lib/api';
 
 export default function HomePage() {
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ['home', 'stats'],
-    queryFn: api.home.stats,
-    refetchInterval: 30_000,
+  const { data: statsResponse, isLoading, isError } = useGetHomeStats({
+    query: { refetchInterval: 30_000 },
   });
+  const data = statsResponse?.data;
 
   return (
     <PageLayout
@@ -197,7 +199,7 @@ function KpiCard({
   );
 }
 
-function UpcomingReservationRow({ reservation: r }: { reservation: Reservation }) {
+function UpcomingReservationRow({ reservation: r }: { reservation: GetHomeStats200UpcomingReservationsItem }) {
   const time = new Date(r.reservationDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   const isToday = new Date(r.reservationDate).toDateString() === new Date().toDateString();
   return (
@@ -222,7 +224,7 @@ function UpcomingReservationRow({ reservation: r }: { reservation: Reservation }
   );
 }
 
-function RecentOrderRow({ order }: { order: OrderWithDetails }) {
+function RecentOrderRow({ order }: { order: GetHomeStats200RecentOrdersItem }) {
   return (
     <View style={styles.orderRow}>
       <View style={styles.orderRowLeft}>
@@ -234,7 +236,7 @@ function RecentOrderRow({ order }: { order: OrderWithDetails }) {
         </Typography>
       </View>
       <View style={styles.orderRowRight}>
-        <OrderStatusBadge status={order.status} size="sm" />
+        <OrderStatusBadge status={order.status as never} size="sm" />
         <Typography variant="bodySemiBold" color="brand">
           {formatCurrency(order.totalCents)}
         </Typography>

@@ -1,14 +1,21 @@
 import { useState } from 'react';
 import { View, StyleSheet, ScrollView, Pressable } from 'react-native';
-import { useQuery, useMutation } from '@tanstack/react-query';
 import { colors, spacing, formatCurrency } from '@ody/shared';
+import {
+  useGetMenuItems,
+  useGetCustomers,
+  usePostOrders,
+  type PostOrders201,
+} from '@ody/api-client';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Typography } from '@/components/ui/Typography';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
-import { api, type OrderWithDetails, type MenuItemWithCategory } from '@/lib/api';
+import type { OrderWithDetails, MenuItem, MenuCategory } from '@/lib/types';
+
+type MenuItemWithCategory = MenuItem & { category: MenuCategory };
 
 interface CreateOrderModalProps {
   visible: boolean;
@@ -28,30 +35,26 @@ export function CreateOrderModal({ visible, onClose, onCreated }: CreateOrderMod
   const [customerSearch, setCustomerSearch] = useState('');
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
 
-  const { data: menuItems, isLoading } = useQuery({
-    queryKey: ['menu-items', 'available'],
-    queryFn: () => api.menuItems.list({ available: 'true' }),
-    enabled: visible,
-  });
+  const { data: menuResponse, isLoading } = useGetMenuItems(
+    { available: 'true' },
+    { query: { enabled: visible } },
+  );
+  const menuItems = (menuResponse?.data ?? []) as MenuItemWithCategory[];
 
-  const { data: customersData } = useQuery({
-    queryKey: ['customers', 'list'],
-    queryFn: () => api.customers.list({ limit: 100 }),
-    enabled: visible,
-  });
+  const { data: customersResponse } = useGetCustomers(
+    { limit: 100 },
+    { query: { enabled: visible } },
+  );
+  const customersData = customersResponse?.data;
 
-  const createOrder = useMutation({
-    mutationFn: () =>
-      api.orders.create({
-        customerId: selectedCustomerId,
-        items: cart.map((c) => ({ menuItemId: c.menuItem.id, quantity: c.quantity })),
-        notes: notes || undefined,
-      }),
-    onSuccess: (order) => {
-      onCreated(order);
-      resetForm();
+  const createOrder = usePostOrders({
+    mutation: {
+      onSuccess: (result) => {
+        onCreated(result.data as unknown as OrderWithDetails);
+        resetForm();
+      },
+      onError: (err: Error) => toast(err.message, 'error'),
     },
-    onError: (err: Error) => toast(err.message, 'error'),
   });
 
   function resetForm() {
@@ -92,11 +95,10 @@ export function CreateOrderModal({ visible, onClose, onCreated }: CreateOrderMod
 
   const selectedCustomer = customersData?.data.find((cu) => cu.id === selectedCustomerId);
 
-  // Group items by category
-  const byCategory = menuItems?.reduce<Record<string, MenuItemWithCategory[]>>((acc, item) => {
+  const byCategory = menuItems.reduce<Record<string, MenuItemWithCategory[]>>((acc, item) => {
     const cat = item.category.name;
     return { ...acc, [cat]: [...(acc[cat] ?? []), item] };
-  }, {}) ?? {};
+  }, {});
 
   return (
     <Modal
@@ -118,7 +120,13 @@ export function CreateOrderModal({ visible, onClose, onCreated }: CreateOrderMod
             <Button label="Cancel" variant="ghost" onPress={() => { resetForm(); onClose(); }} />
             <Button
               label="Place Order"
-              onPress={() => createOrder.mutate()}
+              onPress={() => createOrder.mutate({
+                data: {
+                  customerId: selectedCustomerId,
+                  items: cart.map((c) => ({ menuItemId: c.menuItem.id, quantity: c.quantity })),
+                  notes: notes || undefined,
+                },
+              })}
               loading={createOrder.isPending}
               disabled={cart.length === 0}
             />

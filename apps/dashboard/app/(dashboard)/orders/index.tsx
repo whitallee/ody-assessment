@@ -1,7 +1,14 @@
 import { useState } from 'react';
 import { View, ScrollView, Pressable, StyleSheet } from 'react-native';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { colors, spacing, formatCurrency, formatDateTime } from '@ody/shared';
+import {
+  useGetOrders,
+  usePatchOrdersIdStatus,
+  getGetOrdersQueryKey,
+  getGetHomeStatsQueryKey,
+  type PatchOrdersIdStatus200,
+} from '@ody/api-client';
 import { PageLayout, Section } from '@/components/layout/PageLayout';
 import { Card } from '@/components/ui/Card';
 import { Typography } from '@/components/ui/Typography';
@@ -11,7 +18,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import { CreateOrderModal } from '@/components/features/orders/CreateOrderModal';
-import { api, type OrderWithDetails, type OrderStatus } from '@/lib/api';
+import type { OrderWithDetails, OrderStatus } from '@/lib/types';
 
 const ALL_STATUSES: OrderStatus[] = [
   'pending',
@@ -45,34 +52,32 @@ export default function OrdersPage() {
   const [selectedOrder, setSelectedOrder] = useState<OrderWithDetails | null>(null);
   const [showCreate, setShowCreate] = useState(false);
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['orders', statusFilter],
-    queryFn: () =>
-      api.orders.list({
-        ...(statusFilter !== 'all' ? { status: statusFilter } : {}),
-        limit: 100,
-      }),
-    refetchInterval: 20_000,
-  });
-
-  const updateStatus = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: OrderStatus }) =>
-      api.orders.updateStatus(id, status),
-    onSuccess: (updated) => {
-      qc.invalidateQueries({ queryKey: ['orders'] });
-      qc.invalidateQueries({ queryKey: ['home', 'stats'] });
-      setSelectedOrder(updated);
-      toast(`Order ${updated.status}`, 'success');
+  const { data: ordersResponse, isLoading } = useGetOrders(
+    {
+      ...(statusFilter !== 'all' ? { status: statusFilter } : {}),
+      limit: 100,
     },
-    onError: (err: Error) => toast(err.message, 'error'),
-  });
+    { query: { refetchInterval: 20_000 } },
+  );
+  const orders = (ordersResponse?.data.data ?? []) as OrderWithDetails[];
 
-  const orders = data?.data ?? [];
+  const updateStatus = usePatchOrdersIdStatus({
+    mutation: {
+      onSuccess: (result) => {
+        qc.invalidateQueries({ queryKey: getGetOrdersQueryKey() });
+        qc.invalidateQueries({ queryKey: getGetHomeStatsQueryKey() });
+        const updated = result.data as PatchOrdersIdStatus200;
+        setSelectedOrder(updated as unknown as OrderWithDetails);
+        toast(`Order ${updated.status}`, 'success');
+      },
+      onError: (err: Error) => toast(err.message, 'error'),
+    },
+  });
 
   return (
     <PageLayout
       title="Orders"
-      subtitle={`${data?.total ?? 0} total orders`}
+      subtitle={`${ordersResponse?.data.total ?? 0} total orders`}
       actions={<Button label="New Order" onPress={() => setShowCreate(true)} />}
     >
       {/* Status filter tabs */}
@@ -135,21 +140,21 @@ export default function OrdersPage() {
                   {formatCurrency(order.totalCents)}
                 </Typography>
                 <View style={styles.td}>
-                  <OrderStatusBadge status={order.status} size="sm" />
+                  <OrderStatusBadge status={order.status as never} size="sm" />
                 </View>
                 <Typography variant="caption" color="secondary" style={styles.td}>
                   {formatDateTime(order.createdAt)}
                 </Typography>
                 <View style={styles.tdAction}>
-                  {NEXT_LABEL[order.status] && (
+                  {NEXT_LABEL[order.status as OrderStatus] && (
                     <Button
-                      label={NEXT_LABEL[order.status]!}
+                      label={NEXT_LABEL[order.status as OrderStatus]!}
                       size="sm"
                       variant="secondary"
                       onPress={(e) => {
                         e?.stopPropagation?.();
-                        const next = NEXT_STATUS[order.status];
-                        if (next) updateStatus.mutate({ id: order.id, status: next });
+                        const next = NEXT_STATUS[order.status as OrderStatus];
+                        if (next) updateStatus.mutate({ id: order.id, data: { status: next } });
                       }}
                     />
                   )}
@@ -177,7 +182,7 @@ export default function OrdersPage() {
           order={selectedOrder}
           onClose={() => setSelectedOrder(null)}
           onStatusChange={(status) => {
-            updateStatus.mutate({ id: selectedOrder.id, status });
+            updateStatus.mutate({ id: selectedOrder.id, data: { status } });
           }}
           loading={updateStatus.isPending}
         />
@@ -188,8 +193,8 @@ export default function OrdersPage() {
         visible={showCreate}
         onClose={() => setShowCreate(false)}
         onCreated={(order) => {
-          qc.invalidateQueries({ queryKey: ['orders'] });
-          qc.invalidateQueries({ queryKey: ['home', 'stats'] });
+          qc.invalidateQueries({ queryKey: getGetOrdersQueryKey() });
+          qc.invalidateQueries({ queryKey: getGetHomeStatsQueryKey() });
           setShowCreate(false);
           setSelectedOrder(order);
           toast('Order created', 'success');
@@ -210,8 +215,8 @@ function OrderDetailModal({
   onStatusChange: (s: OrderStatus) => void;
   loading: boolean;
 }) {
-  const nextStatus = NEXT_STATUS[order.status];
-  const nextLabel = NEXT_LABEL[order.status];
+  const nextStatus = NEXT_STATUS[order.status as OrderStatus];
+  const nextLabel = NEXT_LABEL[order.status as OrderStatus];
 
   return (
     <Modal
@@ -236,7 +241,7 @@ function OrderDetailModal({
       }
     >
       <View style={styles.detailHeader}>
-        <OrderStatusBadge status={order.status} />
+        <OrderStatusBadge status={order.status as never} />
         <Typography variant="caption" color="secondary">
           {formatDateTime(order.createdAt)}
         </Typography>
