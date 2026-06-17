@@ -28,7 +28,7 @@ const app = new OpenAPIHono<Env>();
 app.use('*', cors({ origin: '*', allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] }));
 
 app.use('*', async (c, next) => {
-  c.set('db', createDb(c.env.DATABASE_URL));
+  c.set('db', createDb(c.env?.DATABASE_URL ?? ''));
   await next();
 });
 

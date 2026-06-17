@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { ScrollView, View, StyleSheet } from 'react-native';
 import { colors, spacing, radius, fontFamily, fontSize } from '@ody/shared';
 import { Typography } from '@/components/ui/Typography';
@@ -5,11 +6,13 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Badge, OrderStatusBadge } from '@/components/ui/Badge';
 import { Input } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Select';
 import { Skeleton, SkeletonCard, SkeletonRow } from '@/components/ui/Skeleton';
 import { useRouter } from 'expo-router';
 
 export default function UILibraryPage() {
   const router = useRouter();
+  const [selectVal, setSelectVal] = useState<string | null>(null);
 
   return (
     <ScrollView style={styles.page} contentContainerStyle={styles.content}>
@@ -151,6 +154,40 @@ export default function UILibraryPage() {
           <Input label="With hint" placeholder="Enter value" hint="This is a helpful hint." />
           <Input label="Error state" defaultValue="invalid@" error="Please enter a valid email address." />
           <Input label="Disabled" value="Cannot edit this" editable={false} />
+        </View>
+      </Section>
+
+      {/* ── Select ─────────────────────────────────────────────────────────── */}
+      <Section title="Select / Dropdown">
+        <View style={{ maxWidth: 480, gap: spacing[4] }}>
+          <Select
+            label="Default"
+            value={selectVal}
+            onChange={setSelectVal}
+            placeholder="Choose an option…"
+            options={[
+              { value: 'pending', label: 'Pending', description: 'Awaiting confirmation' },
+              { value: 'accepted', label: 'Accepted' },
+              { value: 'preparing', label: 'Preparing' },
+              { value: 'ready', label: 'Ready for pickup' },
+              { value: 'completed', label: 'Completed' },
+            ]}
+            hint="Current value displayed after selection"
+          />
+          <Select
+            label="With error"
+            value={null}
+            onChange={() => {}}
+            options={[{ value: 'a', label: 'Option A' }]}
+            error="This field is required"
+          />
+          <Select
+            label="Disabled"
+            value="accepted"
+            onChange={() => {}}
+            options={[{ value: 'accepted', label: 'Accepted' }]}
+            disabled
+          />
         </View>
       </Section>
 
