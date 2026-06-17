@@ -23,7 +23,7 @@ import { OrderStatusBadge } from '@/components/ui/Badge';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import { initials } from '@ody/shared';
-import type { CustomerWithStats, CustomerDetail, LoyaltyTransaction, Reward } from '@/lib/types';
+import type { CustomerWithStats, CustomerDetail, LoyaltyBalance, LoyaltyTransaction, Reward } from '@/lib/types';
 
 type DetailTab = 'overview' | 'loyalty';
 
@@ -276,7 +276,7 @@ function LoyaltyTab({ customerId }: { customerId: string }) {
   const [adjustDesc, setAdjustDesc] = useState('');
 
   const { data: loyaltyResponse, isLoading } = useGetLoyaltyCustomerId(customerId);
-  const loyalty = loyaltyResponse?.data;
+  const loyalty = loyaltyResponse?.data as LoyaltyBalance | undefined;
 
   const adjust = usePostLoyaltyCustomerIdAdjust({
     mutation: {
@@ -403,8 +403,8 @@ function LoyaltyTab({ customerId }: { customerId: string }) {
             <Typography variant="body" color="tertiary">No transactions yet.</Typography>
           </View>
         ) : (
-          loyalty.transactions.map((tx) => (
-            <TxRow key={tx.id} tx={tx as unknown as LoyaltyTransaction} />
+          (loyalty.transactions as unknown as LoyaltyTransaction[]).map((tx) => (
+            <TxRow key={tx.id} tx={tx} />
           ))
         )}
       </View>
@@ -693,7 +693,7 @@ const styles = StyleSheet.create({
     borderColor: colors.brand[100],
   },
   balanceBig: {
-    fontFamily: fontFamily.displayBold,
+    fontFamily: fontFamily.display,
     fontSize: 32,
     color: colors.brand[700],
     lineHeight: 36,
