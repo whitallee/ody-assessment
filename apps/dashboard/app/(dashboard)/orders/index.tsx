@@ -8,6 +8,8 @@ import {
   getGetOrdersQueryKey,
   getGetHomeStatsQueryKey,
   type PatchOrdersIdStatus200,
+  type GetOrdersParams,
+  type getOrdersResponse,
 } from '@ody/api-client';
 import { PageLayout, Section } from '@/components/layout/PageLayout';
 import { Card } from '@/components/ui/Card';
@@ -54,25 +56,55 @@ export default function OrdersPage() {
   const [selectedOrder, setSelectedOrder] = useState<OrderWithDetails | null>(null);
   const [showCreate, setShowCreate] = useState(false);
 
+  const queryParams: GetOrdersParams = {
+    ...(statusFilter !== 'all' ? { status: statusFilter } : {}),
+    limit: 100,
+  };
+
   const { data: ordersResponse, isLoading } = useGetOrders(
-    {
-      ...(statusFilter !== 'all' ? { status: statusFilter } : {}),
-      limit: 100,
-    },
+    queryParams,
     { query: { refetchInterval: 20_000 } },
   );
   const orders = (ordersResponse?.data.data ?? []) as OrderWithDetails[];
 
   const updateStatus = usePatchOrdersIdStatus({
     mutation: {
+      onMutate: async ({ id, data: { status } }) => {
+        await qc.cancelQueries({ queryKey: getGetOrdersQueryKey() });
+        const queryKey = getGetOrdersQueryKey(queryParams);
+        const previousData = qc.getQueryData<getOrdersResponse>(queryKey);
+        qc.setQueryData<getOrdersResponse>(queryKey, (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            data: {
+              ...old.data,
+              data: old.data.data.map((order) =>
+                order.id === id ? { ...order, status } : order,
+              ),
+            },
+          };
+        });
+        return { previousData, queryKey };
+      },
+      onError: (err: Error, _vars, context) => {
+        const ctx = context as
+          | { previousData: getOrdersResponse | undefined; queryKey: ReturnType<typeof getGetOrdersQueryKey> }
+          | undefined;
+        if (ctx?.previousData !== undefined) {
+          qc.setQueryData(ctx.queryKey, ctx.previousData);
+        }
+        toast(err.message, 'error');
+      },
       onSuccess: (result) => {
-        qc.invalidateQueries({ queryKey: getGetOrdersQueryKey() });
-        qc.invalidateQueries({ queryKey: getGetHomeStatsQueryKey() });
         const updated = result.data as PatchOrdersIdStatus200;
         setSelectedOrder(updated as unknown as OrderWithDetails);
         toast(`Order ${updated.status}`, 'success');
       },
-      onError: (err: Error) => toast(err.message, 'error'),
+      onSettled: () => {
+        qc.invalidateQueries({ queryKey: getGetOrdersQueryKey() });
+        qc.invalidateQueries({ queryKey: getGetHomeStatsQueryKey() });
+      },
     },
   });
 
