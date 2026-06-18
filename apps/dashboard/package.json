@@ -8,7 +8,9 @@
     "build:web": "EXPO_PUBLIC_API_URL=https://ody-backend.whitallee.workers.dev expo export --platform web",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "test": "jest --passWithNoTests"
+    "test": "jest --passWithNoTests",
+    "e2e": "playwright test",
+    "e2e:install": "playwright install --with-deps chromium"
   },
   "dependencies": {
     "@babel/runtime": "^7.29.7",
@@ -33,6 +35,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.25.0",
+    "@playwright/test": "^1.61.0",
     "@testing-library/react-native": "^12.7.0",
     "@types/jest": "^30.0.0",
     "@types/react": "~18.3.12",
@@ -43,6 +46,10 @@
   },
   "jest": {
     "preset": "jest-expo",
+    "testPathIgnorePatterns": [
+      "<rootDir>/node_modules/",
+      "<rootDir>/e2e/"
+    ],
     "transformIgnorePatterns": [
       "node_modules/(?!(\\.pnpm|(jest-)?react-native|@react-native(-community)?|@react-native/.*|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg|@ody/.*))"
     ]
