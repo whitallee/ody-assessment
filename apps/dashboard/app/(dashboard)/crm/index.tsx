@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Pressable, StyleSheet, ScrollView as RNScrollView } from 'react-native';
+import { View, Pressable, StyleSheet, ScrollView as RNScrollView, useWindowDimensions } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { colors, spacing, fontFamily, fontSize, formatCurrency, formatDate } from '@ody/shared';
 import {
@@ -28,6 +28,8 @@ import type { CustomerWithStats, CustomerDetail, LoyaltyBalance, LoyaltyTransact
 type DetailTab = 'overview' | 'loyalty';
 
 export default function CrmPage() {
+  const { width } = useWindowDimensions();
+  const isMobile = width < 768;
   const { data: customersResponse, isLoading } = useGetCustomers({ limit: 100 });
   const customers = (customersResponse?.data.data ?? []) as CustomerWithStats[];
 
@@ -61,37 +63,102 @@ export default function CrmPage() {
           />
         </View>
 
-        <View style={styles.tableHeader}>
-          {['Customer', 'Contact', 'Orders', 'Total Spent', 'Last Order', ''].map((h) => (
-            <Typography key={h} variant="overline" style={styles.th}>
-              {h}
-            </Typography>
-          ))}
-        </View>
-
-        {isLoading
-          ? Array.from({ length: 6 }).map((_, i) => (
-              <View key={i} style={styles.row}>
-                <View style={styles.avatarGroup}>
-                  <Skeleton width={36} height={36} borderRadius={18} />
-                  <View style={{ gap: 4 }}>
-                    <Skeleton width={100} height={13} />
-                    <Skeleton width={70} height={11} />
+        {isMobile ? (
+          /* ── Mobile: card-based list ── */
+          <>
+            {isLoading
+              ? Array.from({ length: 5 }).map((_, i) => (
+                  <View key={i} style={styles.customerCard}>
+                    <View style={styles.customerCardHeader}>
+                      <Skeleton width={36} height={36} borderRadius={18} />
+                      <View style={{ flex: 1, gap: 4 }}>
+                        <Skeleton width="50%" height={13} />
+                        <Skeleton width="70%" height={11} />
+                      </View>
+                    </View>
+                    <View style={styles.customerCardMeta}>
+                      <Skeleton width="30%" height={11} />
+                      <Skeleton width="30%" height={11} />
+                      <Skeleton width="40%" height={11} />
+                    </View>
                   </View>
-                </View>
-                <Skeleton width="15%" height={13} />
-                <Skeleton width="10%" height={13} />
-                <Skeleton width="15%" height={13} />
-                <Skeleton width="18%" height={13} />
-              </View>
-            ))
-          : filteredCustomers.map((customer) => (
-              <CustomerRow
-                key={customer.id}
-                customer={customer}
-                onSelect={() => setSelectedId(customer.id)}
-              />
-            ))}
+                ))
+              : filteredCustomers.map((customer) => (
+                  <Pressable
+                    key={customer.id}
+                    style={({ hovered }: { hovered?: boolean }) => [
+                      styles.customerCard,
+                      hovered && styles.rowHover,
+                    ]}
+                    onPress={() => setSelectedId(customer.id)}
+                  >
+                    <View style={styles.customerCardHeader}>
+                      <View style={styles.avatar}>
+                        <Typography style={styles.avatarText}>{initials(customer.name)}</Typography>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Typography variant="bodyMedium">{customer.name}</Typography>
+                        {customer.email && (
+                          <Typography variant="caption" color="secondary">{customer.email}</Typography>
+                        )}
+                      </View>
+                    </View>
+                    <View style={styles.customerCardMeta}>
+                      <Typography variant="caption" color="secondary">
+                        {customer.orderCount} {customer.orderCount === 1 ? 'order' : 'orders'}
+                      </Typography>
+                      <Typography variant="caption" color="secondary"> · </Typography>
+                      <Typography variant="caption" color="brand">
+                        {formatCurrency(customer.totalSpentCents)}
+                      </Typography>
+                      {customer.lastOrderAt ? (
+                        <>
+                          <Typography variant="caption" color="secondary"> · </Typography>
+                          <Typography variant="caption" color="secondary">
+                            {formatDate(customer.lastOrderAt)}
+                          </Typography>
+                        </>
+                      ) : null}
+                    </View>
+                  </Pressable>
+                ))}
+          </>
+        ) : (
+          /* ── Desktop: table layout ── */
+          <>
+            <View style={styles.tableHeader}>
+              {['Customer', 'Contact', 'Orders', 'Total Spent', 'Last Order', ''].map((h) => (
+                <Typography key={h} variant="overline" style={styles.th}>
+                  {h}
+                </Typography>
+              ))}
+            </View>
+
+            {isLoading
+              ? Array.from({ length: 6 }).map((_, i) => (
+                  <View key={i} style={styles.row}>
+                    <View style={styles.avatarGroup}>
+                      <Skeleton width={36} height={36} borderRadius={18} />
+                      <View style={{ gap: 4 }}>
+                        <Skeleton width={100} height={13} />
+                        <Skeleton width={70} height={11} />
+                      </View>
+                    </View>
+                    <Skeleton width="15%" height={13} />
+                    <Skeleton width="10%" height={13} />
+                    <Skeleton width="15%" height={13} />
+                    <Skeleton width="18%" height={13} />
+                  </View>
+                ))
+              : filteredCustomers.map((customer) => (
+                  <CustomerRow
+                    key={customer.id}
+                    customer={customer}
+                    onSelect={() => setSelectedId(customer.id)}
+                  />
+                ))}
+          </>
+        )}
 
         {!isLoading && filteredCustomers.length === 0 && (
           <View style={styles.empty}>
@@ -648,6 +715,23 @@ const styles = StyleSheet.create({
     padding: spacing[10],
     alignItems: 'center',
     gap: spacing[2],
+  },
+  customerCard: {
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[3.5],
+    borderBottomWidth: 1,
+    borderBottomColor: colors.neutral[50],
+    gap: spacing[2],
+  },
+  customerCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
+  },
+  customerCardMeta: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
   },
 
   // Tab bar
