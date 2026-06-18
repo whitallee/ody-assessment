@@ -21,5 +21,8 @@ services/backend/openapi.json
 .DS_Store
 Thumbs.db
 
+# npm lockfile (project uses pnpm)
+package-lock.json
+
 # Assessment specs
 fullstack_developer_assignment_ody.md
