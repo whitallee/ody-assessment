@@ -50,10 +50,15 @@ export const CreateMenuItemSchema = createInsertSchema(menuItems, {
 
 export const UpdateMenuItemSchema = CreateMenuItemSchema.partial();
 
+export const ReorderMenuItemsSchema = z.array(
+  z.object({ id: z.string().uuid(), sortOrder: z.number().int().min(0) }),
+).min(1);
+
 export type MenuItem = z.infer<typeof MenuItemSchema>;
 export type MenuItemWithCategory = z.infer<typeof MenuItemWithCategorySchema>;
 export type CreateMenuItem = z.infer<typeof CreateMenuItemSchema>;
 export type UpdateMenuItem = z.infer<typeof UpdateMenuItemSchema>;
+export type ReorderMenuItems = z.infer<typeof ReorderMenuItemsSchema>;
 
 // ─── Customers ────────────────────────────────────────────────────────────────
 

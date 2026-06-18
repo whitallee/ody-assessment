@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { View, ScrollView, Pressable, StyleSheet, Switch } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { colors, spacing, formatCurrency } from '@ody/shared';
@@ -9,9 +9,21 @@ import {
   usePostMenuItems,
   usePutMenuItemsId,
   useDeleteMenuItemsId,
+  usePatchMenuItemsReorder,
   getGetMenuCategoriesQueryKey,
   getGetMenuItemsQueryKey,
 } from '@ody/api-client';
+
+type DragViewProps = React.ComponentProps<typeof View> & {
+  draggable?: boolean;
+  onDragStart?: (e: React.DragEvent) => void;
+  onDragOver?: (e: React.DragEvent) => void;
+  onDrop?: (e: React.DragEvent) => void;
+  onDragEnd?: (e: React.DragEvent) => void;
+  onDragEnter?: (e: React.DragEvent) => void;
+  onDragLeave?: (e: React.DragEvent) => void;
+};
+const DragView = View as React.ComponentType<DragViewProps>;
 import { PageLayout, Section } from '@/components/layout/PageLayout';
 import { Card } from '@/components/ui/Card';
 import { Typography } from '@/components/ui/Typography';
@@ -33,6 +45,9 @@ export default function MenuPage() {
   const [showCreateItem, setShowCreateItem] = useState(false);
   const [showCreateCategory, setShowCreateCategory] = useState(false);
   const [deleteItem, setDeleteItem] = useState<MenuItemWithCategory | null>(null);
+  const [reorderMode, setReorderMode] = useState(false);
+  const [orderedItems, setOrderedItems] = useState<MenuItemWithCategory[]>([]);
+  const draggedId = useRef<string | null>(null);
 
   const { data: catsResponse, isLoading: catsLoading } = useGetMenuCategories();
   const categories = catsResponse?.data ?? [];
@@ -60,14 +75,71 @@ export default function MenuPage() {
     },
   });
 
+  const reorderMutation = usePatchMenuItemsReorder({
+    mutation: {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getGetMenuItemsQueryKey() });
+        toast('Order saved', 'success');
+      },
+      onError: (err: Error) => toast(err.message, 'error'),
+    },
+  });
+
+  function enterReorderMode() {
+    setOrderedItems([...items]);
+    setReorderMode(true);
+  }
+
+  function exitReorderMode() {
+    setReorderMode(false);
+    setOrderedItems([]);
+  }
+
+  function handleDragStart(id: string) {
+    draggedId.current = id;
+  }
+
+  function handleDragOver(e: React.DragEvent, targetId: string) {
+    e.preventDefault();
+    if (!draggedId.current || draggedId.current === targetId) return;
+    const fromIdx = orderedItems.findIndex((i) => i.id === draggedId.current);
+    const toIdx = orderedItems.findIndex((i) => i.id === targetId);
+    if (fromIdx === -1 || toIdx === -1) return;
+    const next = [...orderedItems];
+    const [moved] = next.splice(fromIdx, 1);
+    next.splice(toIdx, 0, moved);
+    setOrderedItems(next);
+  }
+
+  function handleDragEnd() {
+    if (!draggedId.current) return;
+    draggedId.current = null;
+    reorderMutation.mutate({
+      data: orderedItems.map((item, idx) => ({ id: item.id, sortOrder: idx })),
+    });
+  }
+
+  const displayItems = reorderMode ? orderedItems : items;
+
   return (
     <PageLayout
       title="Menu"
       subtitle={`${items.length} items`}
       actions={
         <View style={{ flexDirection: 'row', gap: spacing[3] }}>
-          <Button label="Add Category" variant="secondary" onPress={() => setShowCreateCategory(true)} />
-          <Button label="Add Item" onPress={() => setShowCreateItem(true)} />
+          {reorderMode ? (
+            <Button label="Done" variant="secondary" onPress={exitReorderMode} />
+          ) : (
+            <>
+              <Button
+                label="Reorder"
+                variant="secondary"
+                onPress={enterReorderMode}
+              />
+              <Button label="Add Category" variant="secondary" onPress={() => setShowCreateCategory(true)} />
+              <Button label="Add Item" onPress={() => setShowCreateItem(true)} />
+            </>
+          )}
         </View>
       }
     >
@@ -79,7 +151,7 @@ export default function MenuPage() {
           </View>
           <Pressable
             style={[styles.catItem, activeCategoryId === null && styles.catItemActive]}
-            onPress={() => setActiveCategoryId(null)}
+            onPress={() => { setActiveCategoryId(null); exitReorderMode(); }}
           >
             <Typography
               variant={activeCategoryId === null ? 'bodySemiBold' : 'body'}
@@ -102,7 +174,7 @@ export default function MenuPage() {
                     activeCategoryId === cat.id && styles.catItemActive,
                     !activeCategoryId && hovered && { backgroundColor: colors.neutral[50] },
                   ]}
-                  onPress={() => setActiveCategoryId(cat.id)}
+                  onPress={() => { setActiveCategoryId(cat.id); exitReorderMode(); }}
                 >
                   <Typography
                     variant={activeCategoryId === cat.id ? 'bodySemiBold' : 'body'}
@@ -121,40 +193,69 @@ export default function MenuPage() {
               ))}
         </Card>
 
-        {/* Items grid */}
-        <View style={styles.itemsGrid}>
-          {itemsLoading
-            ? Array.from({ length: 6 }).map((_, i) => (
-                <Card key={i}>
-                  <Skeleton height={16} width="60%" />
-                  <View style={{ height: 8 }} />
-                  <Skeleton height={12} width="90%" />
-                  <View style={{ height: 12 }} />
-                  <Skeleton height={20} width="30%" />
-                </Card>
-              ))
-            : items.map((item) => (
-                <MenuItemCard
-                  key={item.id}
-                  item={item}
-                  onEdit={() => setEditItem(item)}
-                  onToggle={(v) => toggleAvailability.mutate({ id: item.id, data: { isAvailable: v } })}
-                  onDelete={() => setDeleteItem(item)}
-                />
-              ))}
-
-          {!itemsLoading && items.length === 0 && (
-            <View style={styles.empty}>
-              <Typography variant="heading4" color="secondary">No items</Typography>
-              <Typography variant="body" color="tertiary">
-                Add your first menu item to get started.
+        {/* Items grid / reorder list */}
+        {reorderMode ? (
+          <Card style={{ flex: 1 }} padding="none">
+            <View style={styles.reorderHeader}>
+              <Typography variant="label" color="secondary">
+                Drag items to reorder — changes are saved automatically
               </Typography>
-              <View style={{ marginTop: 8 }}>
-                <Button label="Add Item" onPress={() => setShowCreateItem(true)} />
-              </View>
             </View>
-          )}
-        </View>
+            {displayItems.map((item) => (
+              <DragView
+                key={item.id}
+                draggable
+                onDragStart={() => handleDragStart(item.id)}
+                onDragOver={(e) => handleDragOver(e, item.id)}
+                onDragEnd={handleDragEnd}
+                style={styles.reorderRow}
+              >
+                <Typography style={styles.dragHandle}>☰</Typography>
+                <View style={{ flex: 1 }}>
+                  <Typography variant="bodyMedium">{item.name}</Typography>
+                  <Typography variant="caption" color="secondary">{item.category.name}</Typography>
+                </View>
+                <Typography variant="bodySemiBold" color="brand">
+                  {formatCurrency(item.priceCents)}
+                </Typography>
+              </DragView>
+            ))}
+          </Card>
+        ) : (
+          <View style={styles.itemsGrid}>
+            {itemsLoading
+              ? Array.from({ length: 6 }).map((_, i) => (
+                  <Card key={i}>
+                    <Skeleton height={16} width="60%" />
+                    <View style={{ height: 8 }} />
+                    <Skeleton height={12} width="90%" />
+                    <View style={{ height: 12 }} />
+                    <Skeleton height={20} width="30%" />
+                  </Card>
+                ))
+              : displayItems.map((item) => (
+                  <MenuItemCard
+                    key={item.id}
+                    item={item}
+                    onEdit={() => setEditItem(item)}
+                    onToggle={(v) => toggleAvailability.mutate({ id: item.id, data: { isAvailable: v } })}
+                    onDelete={() => setDeleteItem(item)}
+                  />
+                ))}
+
+            {!itemsLoading && displayItems.length === 0 && (
+              <View style={styles.empty}>
+                <Typography variant="heading4" color="secondary">No items</Typography>
+                <Typography variant="body" color="tertiary">
+                  Add your first menu item to get started.
+                </Typography>
+                <View style={{ marginTop: 8 }}>
+                  <Button label="Add Item" onPress={() => setShowCreateItem(true)} />
+                </View>
+              </View>
+            )}
+          </View>
+        )}
       </View>
 
       {/* Create / Edit modals */}
@@ -473,6 +574,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing[2],
+  },
+  reorderHeader: {
+    padding: spacing[4],
+    borderBottomWidth: 1,
+    borderBottomColor: colors.neutral[100],
+  },
+  reorderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[3],
+    borderBottomWidth: 1,
+    borderBottomColor: colors.neutral[50],
+    gap: spacing[3],
+  },
+  dragHandle: {
+    fontSize: 18,
+    color: colors.neutral[400],
   },
   catPill: {
     paddingHorizontal: spacing[3],
