@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, ScrollView, Pressable, StyleSheet } from 'react-native';
+import { View, ScrollView, Pressable, StyleSheet, useWindowDimensions } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { colors, spacing, formatCurrency, formatDateTime } from '@ody/shared';
 import {
@@ -46,6 +46,8 @@ const NEXT_LABEL: Partial<Record<OrderStatus, string>> = {
 };
 
 export default function OrdersPage() {
+  const { width } = useWindowDimensions();
+  const isMobile = width < 768;
   const qc = useQueryClient();
   const { toast } = useToast();
   const [statusFilter, setStatusFilter] = useState<OrderStatus | 'all'>('all');
@@ -99,68 +101,136 @@ export default function OrdersPage() {
         </View>
       </ScrollView>
 
-      {/* Orders table */}
+      {/* Orders table / card list */}
       <Card padding="none">
-        {/* Table header */}
-        <View style={styles.tableHeader}>
-          {['Customer', 'Items', 'Total', 'Status', 'Time', ''].map((h) => (
-            <Typography key={h} variant="overline" style={styles.th}>
-              {h}
-            </Typography>
-          ))}
-        </View>
+        {isMobile ? (
+          /* ── Mobile: card-based list ── */
+          <>
+            {isLoading
+              ? Array.from({ length: 4 }).map((_, i) => (
+                  <View key={i} style={styles.orderCard}>
+                    <View style={styles.orderCardHeader}>
+                      <Skeleton width="40%" height={14} />
+                      <Skeleton width={64} height={22} borderRadius={99} />
+                    </View>
+                    <View style={styles.orderCardMeta}>
+                      <Skeleton width="20%" height={12} />
+                      <Skeleton width="20%" height={12} />
+                      <Skeleton width="30%" height={12} />
+                    </View>
+                  </View>
+                ))
+              : orders.map((order) => (
+                  <Pressable
+                    key={order.id}
+                    style={({ hovered }: { hovered?: boolean }) => [
+                      styles.orderCard,
+                      hovered && styles.tableRowHover,
+                    ]}
+                    onPress={() => setSelectedOrder(order)}
+                  >
+                    <View style={styles.orderCardHeader}>
+                      <Typography variant="bodyMedium" style={{ flex: 1 }}>
+                        {order.customer?.name ?? 'Guest'}
+                      </Typography>
+                      <OrderStatusBadge status={order.status as never} size="sm" />
+                    </View>
+                    <View style={styles.orderCardMeta}>
+                      <Typography variant="caption" color="secondary">
+                        {order.items.length} {order.items.length === 1 ? 'item' : 'items'}
+                      </Typography>
+                      <Typography variant="caption" color="secondary"> · </Typography>
+                      <Typography variant="caption" color="secondary">
+                        {formatCurrency(order.totalCents)}
+                      </Typography>
+                      <Typography variant="caption" color="secondary"> · </Typography>
+                      <Typography variant="caption" color="secondary">
+                        {formatDateTime(order.createdAt)}
+                      </Typography>
+                    </View>
+                    {NEXT_LABEL[order.status as OrderStatus] && (
+                      <View style={styles.orderCardAction}>
+                        <Button
+                          label={NEXT_LABEL[order.status as OrderStatus]!}
+                          size="sm"
+                          variant="secondary"
+                          onPress={(e) => {
+                            e?.stopPropagation?.();
+                            const next = NEXT_STATUS[order.status as OrderStatus];
+                            if (next)
+                              updateStatus.mutate({ id: order.id, data: { status: next } });
+                          }}
+                        />
+                      </View>
+                    )}
+                  </Pressable>
+                ))}
+          </>
+        ) : (
+          /* ── Desktop: table layout ── */
+          <>
+            <View style={styles.tableHeader}>
+              {['Customer', 'Items', 'Total', 'Status', 'Time', ''].map((h) => (
+                <Typography key={h} variant="overline" style={styles.th}>
+                  {h}
+                </Typography>
+              ))}
+            </View>
 
-        {isLoading
-          ? Array.from({ length: 6 }).map((_, i) => (
-              <View key={i} style={styles.tableRow}>
-                <Skeleton width="25%" height={13} />
-                <Skeleton width="15%" height={13} />
-                <Skeleton width="15%" height={13} />
-                <Skeleton width="18%" height={20} />
-                <Skeleton width="18%" height={13} />
-                <Skeleton width="8%" height={28} borderRadius={6} />
-              </View>
-            ))
-          : orders.map((order) => (
-              <Pressable
-                key={order.id}
-                style={({ hovered }: { hovered?: boolean }) => [
-                  styles.tableRow,
-                  hovered && styles.tableRowHover,
-                ]}
-                onPress={() => setSelectedOrder(order)}
-              >
-                <Typography variant="bodyMedium" style={styles.td}>
-                  {order.customer?.name ?? 'Guest'}
-                </Typography>
-                <Typography variant="body" color="secondary" style={styles.td}>
-                  {order.items.length} {order.items.length === 1 ? 'item' : 'items'}
-                </Typography>
-                <Typography variant="bodySemiBold" style={styles.td}>
-                  {formatCurrency(order.totalCents)}
-                </Typography>
-                <View style={styles.td}>
-                  <OrderStatusBadge status={order.status as never} size="sm" />
-                </View>
-                <Typography variant="caption" color="secondary" style={styles.td}>
-                  {formatDateTime(order.createdAt)}
-                </Typography>
-                <View style={styles.tdAction}>
-                  {NEXT_LABEL[order.status as OrderStatus] && (
-                    <Button
-                      label={NEXT_LABEL[order.status as OrderStatus]!}
-                      size="sm"
-                      variant="secondary"
-                      onPress={(e) => {
-                        e?.stopPropagation?.();
-                        const next = NEXT_STATUS[order.status as OrderStatus];
-                        if (next) updateStatus.mutate({ id: order.id, data: { status: next } });
-                      }}
-                    />
-                  )}
-                </View>
-              </Pressable>
-            ))}
+            {isLoading
+              ? Array.from({ length: 6 }).map((_, i) => (
+                  <View key={i} style={styles.tableRow}>
+                    <Skeleton width="25%" height={13} />
+                    <Skeleton width="15%" height={13} />
+                    <Skeleton width="15%" height={13} />
+                    <Skeleton width="18%" height={20} />
+                    <Skeleton width="18%" height={13} />
+                    <Skeleton width="8%" height={28} borderRadius={6} />
+                  </View>
+                ))
+              : orders.map((order) => (
+                  <Pressable
+                    key={order.id}
+                    style={({ hovered }: { hovered?: boolean }) => [
+                      styles.tableRow,
+                      hovered && styles.tableRowHover,
+                    ]}
+                    onPress={() => setSelectedOrder(order)}
+                  >
+                    <Typography variant="bodyMedium" style={styles.td}>
+                      {order.customer?.name ?? 'Guest'}
+                    </Typography>
+                    <Typography variant="body" color="secondary" style={styles.td}>
+                      {order.items.length} {order.items.length === 1 ? 'item' : 'items'}
+                    </Typography>
+                    <Typography variant="bodySemiBold" style={styles.td}>
+                      {formatCurrency(order.totalCents)}
+                    </Typography>
+                    <View style={styles.td}>
+                      <OrderStatusBadge status={order.status as never} size="sm" />
+                    </View>
+                    <Typography variant="caption" color="secondary" style={styles.td}>
+                      {formatDateTime(order.createdAt)}
+                    </Typography>
+                    <View style={styles.tdAction}>
+                      {NEXT_LABEL[order.status as OrderStatus] && (
+                        <Button
+                          label={NEXT_LABEL[order.status as OrderStatus]!}
+                          size="sm"
+                          variant="secondary"
+                          onPress={(e) => {
+                            e?.stopPropagation?.();
+                            const next = NEXT_STATUS[order.status as OrderStatus];
+                            if (next)
+                              updateStatus.mutate({ id: order.id, data: { status: next } });
+                          }}
+                        />
+                      )}
+                    </View>
+                  </Pressable>
+                ))}
+          </>
+        )}
 
         {!isLoading && orders.length === 0 && (
           <View style={styles.empty}>
@@ -412,5 +482,25 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: spacing[3],
     gap: spacing[0.5],
+  },
+  orderCard: {
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[3.5],
+    borderBottomWidth: 1,
+    borderBottomColor: colors.neutral[50],
+    gap: spacing[2],
+  },
+  orderCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
+  },
+  orderCardMeta: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+  },
+  orderCardAction: {
+    alignSelf: 'flex-start',
   },
 });
