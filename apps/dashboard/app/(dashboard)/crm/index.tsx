@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { View, Pressable, StyleSheet, ScrollView as RNScrollView } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
-import { colors, spacing, fontFamily, fontSize, radius, formatCurrency, formatDate } from '@ody/shared';
+import { colors, spacing, fontFamily, fontSize, formatCurrency, formatDate } from '@ody/shared';
 import {
   useGetCustomers,
   useGetCustomersId,
