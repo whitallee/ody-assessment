@@ -33,14 +33,34 @@ export default function CrmPage() {
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredCustomers = searchQuery.trim()
+    ? customers.filter((c) => {
+        const q = searchQuery.toLowerCase();
+        return c.name.toLowerCase().includes(q) || c.email?.toLowerCase().includes(q);
+      })
+    : customers;
+
+  const subtitle = searchQuery.trim()
+    ? `${filteredCustomers.length} of ${customersResponse?.data.total ?? 0} customers`
+    : `${customersResponse?.data.total ?? 0} customers`;
 
   return (
     <PageLayout
       title="CRM"
-      subtitle={`${customersResponse?.data.total ?? 0} customers`}
+      subtitle={subtitle}
       actions={<Button label="Add Customer" onPress={() => setShowCreate(true)} />}
     >
       <Card padding="none">
+        <View style={styles.searchBar}>
+          <Input
+            placeholder="Search by name or email…"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+        </View>
+
         <View style={styles.tableHeader}>
           {['Customer', 'Contact', 'Orders', 'Total Spent', 'Last Order', ''].map((h) => (
             <Typography key={h} variant="overline" style={styles.th}>
@@ -65,7 +85,7 @@ export default function CrmPage() {
                 <Skeleton width="18%" height={13} />
               </View>
             ))
-          : customers.map((customer) => (
+          : filteredCustomers.map((customer) => (
               <CustomerRow
                 key={customer.id}
                 customer={customer}
@@ -73,10 +93,19 @@ export default function CrmPage() {
               />
             ))}
 
-        {!isLoading && customers.length === 0 && (
+        {!isLoading && filteredCustomers.length === 0 && (
           <View style={styles.empty}>
-            <Typography variant="heading4" color="secondary">No customers yet</Typography>
-            <Typography variant="body" color="tertiary">Add your first customer to get started.</Typography>
+            {searchQuery.trim() ? (
+              <>
+                <Typography variant="heading4" color="secondary">No results</Typography>
+                <Typography variant="body" color="tertiary">No customers match "{searchQuery}".</Typography>
+              </>
+            ) : (
+              <>
+                <Typography variant="heading4" color="secondary">No customers yet</Typography>
+                <Typography variant="body" color="tertiary">Add your first customer to get started.</Typography>
+              </>
+            )}
           </View>
         )}
       </Card>
@@ -570,6 +599,11 @@ function AddCustomerModal({ visible, onClose }: { visible: boolean; onClose: () 
 }
 
 const styles = StyleSheet.create({
+  searchBar: {
+    padding: spacing[4],
+    borderBottomWidth: 1,
+    borderBottomColor: colors.neutral[100],
+  },
   tableHeader: {
     flexDirection: 'row',
     alignItems: 'center',
