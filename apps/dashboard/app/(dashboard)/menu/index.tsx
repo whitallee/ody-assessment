@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { View, ScrollView, Pressable, StyleSheet, Switch } from 'react-native';
+import { View, ScrollView, Pressable, StyleSheet, Switch, useWindowDimensions } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { colors, spacing, formatCurrency } from '@ody/shared';
 import {
@@ -38,6 +38,8 @@ import type { MenuCategory, MenuItem } from '@/lib/types';
 type MenuItemWithCategory = MenuItem & { category: MenuCategory };
 
 export default function MenuPage() {
+  const { width } = useWindowDimensions();
+  const isMobile = width < 768;
   const qc = useQueryClient();
   const { toast } = useToast();
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
@@ -126,7 +128,7 @@ export default function MenuPage() {
       title="Menu"
       subtitle={`${items.length} items`}
       actions={
-        <View style={{ flexDirection: 'row', gap: spacing[3] }}>
+        <View style={isMobile ? styles.mobileActions : styles.desktopActions}>
           {reorderMode ? (
             <Button label="Done" variant="secondary" onPress={exitReorderMode} />
           ) : (
@@ -143,55 +145,99 @@ export default function MenuPage() {
         </View>
       }
     >
-      <View style={styles.layout}>
-        {/* Category sidebar */}
-        <Card style={styles.categorySidebar} padding="none">
-          <View style={styles.catHeader}>
-            <Typography variant="heading4">Categories</Typography>
-          </View>
+      {/* Mobile: horizontal category tab strip replaces the sidebar */}
+      {isMobile && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.mobileCatScroll}
+          contentContainerStyle={styles.mobileCatContent}
+        >
           <Pressable
-            style={[styles.catItem, activeCategoryId === null && styles.catItemActive]}
+            style={[styles.mobileCatPill, activeCategoryId === null && styles.mobileCatPillActive]}
             onPress={() => { setActiveCategoryId(null); exitReorderMode(); }}
           >
             <Typography
-              variant={activeCategoryId === null ? 'bodySemiBold' : 'body'}
-              style={activeCategoryId === null ? { color: colors.brand[700] } : { color: colors.neutral[700] }}
+              variant="label"
+              style={activeCategoryId === null ? { color: colors.brand[700] } : { color: colors.neutral[600] }}
             >
               All Items
             </Typography>
           </Pressable>
           {catsLoading
-            ? Array.from({ length: 4 }).map((_, i) => (
-                <View key={i} style={styles.catItem}>
-                  <Skeleton width="80%" height={14} />
+            ? Array.from({ length: 3 }).map((_, i) => (
+                <View key={i} style={styles.mobileCatPill}>
+                  <Skeleton width={60} height={14} />
                 </View>
               ))
             : categories.map((cat) => (
                 <Pressable
                   key={cat.id}
-                  style={({ hovered }: { hovered?: boolean }) => [
-                    styles.catItem,
-                    activeCategoryId === cat.id && styles.catItemActive,
-                    !activeCategoryId && hovered && { backgroundColor: colors.neutral[50] },
-                  ]}
+                  style={[styles.mobileCatPill, activeCategoryId === cat.id && styles.mobileCatPillActive]}
                   onPress={() => { setActiveCategoryId(cat.id); exitReorderMode(); }}
                 >
                   <Typography
-                    variant={activeCategoryId === cat.id ? 'bodySemiBold' : 'body'}
-                    style={
-                      activeCategoryId === cat.id
-                        ? { color: colors.brand[700] }
-                        : { color: colors.neutral[700] }
-                    }
+                    variant="label"
+                    style={activeCategoryId === cat.id ? { color: colors.brand[700] } : { color: colors.neutral[600] }}
                   >
-                    {cat.name}
+                    {cat.name}{!cat.isActive ? ' (Hidden)' : ''}
                   </Typography>
-                  {!cat.isActive && (
-                    <Badge label="Hidden" variant="default" size="sm" />
-                  )}
                 </Pressable>
               ))}
-        </Card>
+        </ScrollView>
+      )}
+
+      <View style={[styles.layout, isMobile && styles.layoutMobile]}>
+        {/* Desktop only: category sidebar */}
+        {!isMobile && (
+          <Card style={styles.categorySidebar} padding="none">
+            <View style={styles.catHeader}>
+              <Typography variant="heading4">Categories</Typography>
+            </View>
+            <Pressable
+              style={[styles.catItem, activeCategoryId === null && styles.catItemActive]}
+              onPress={() => { setActiveCategoryId(null); exitReorderMode(); }}
+            >
+              <Typography
+                variant={activeCategoryId === null ? 'bodySemiBold' : 'body'}
+                style={activeCategoryId === null ? { color: colors.brand[700] } : { color: colors.neutral[700] }}
+              >
+                All Items
+              </Typography>
+            </Pressable>
+            {catsLoading
+              ? Array.from({ length: 4 }).map((_, i) => (
+                  <View key={i} style={styles.catItem}>
+                    <Skeleton width="80%" height={14} />
+                  </View>
+                ))
+              : categories.map((cat) => (
+                  <Pressable
+                    key={cat.id}
+                    style={({ hovered }: { hovered?: boolean }) => [
+                      styles.catItem,
+                      activeCategoryId === cat.id && styles.catItemActive,
+                      !activeCategoryId && hovered && { backgroundColor: colors.neutral[50] },
+                    ]}
+                    onPress={() => { setActiveCategoryId(cat.id); exitReorderMode(); }}
+                  >
+                    <Typography
+                      variant={activeCategoryId === cat.id ? 'bodySemiBold' : 'body'}
+                      style={
+                        activeCategoryId === cat.id
+                          ? { color: colors.brand[700] }
+                          : { color: colors.neutral[700] }
+                      }
+                    >
+                      {cat.name}
+                    </Typography>
+                    {!cat.isActive && (
+                      <Badge label="Hidden" variant="default" size="sm" />
+                    )}
+                  </Pressable>
+                ))}
+          </Card>
+        )}
 
         {/* Items grid / reorder list */}
         {reorderMode ? (
@@ -222,10 +268,10 @@ export default function MenuPage() {
             ))}
           </Card>
         ) : (
-          <View style={styles.itemsGrid}>
+          <View style={[styles.itemsGrid, isMobile && styles.itemsGridMobile]}>
             {itemsLoading
               ? Array.from({ length: 6 }).map((_, i) => (
-                  <Card key={i}>
+                  <Card key={i} style={isMobile ? styles.itemCardMobile : undefined}>
                     <Skeleton height={16} width="60%" />
                     <View style={{ height: 8 }} />
                     <Skeleton height={12} width="90%" />
@@ -237,6 +283,7 @@ export default function MenuPage() {
                   <MenuItemCard
                     key={item.id}
                     item={item}
+                    isMobile={isMobile}
                     onEdit={() => setEditItem(item)}
                     onToggle={(v) => toggleAvailability.mutate({ id: item.id, data: { isAvailable: v } })}
                     onDelete={() => setDeleteItem(item)}
@@ -299,17 +346,19 @@ export default function MenuPage() {
 
 function MenuItemCard({
   item,
+  isMobile,
   onEdit,
   onToggle,
   onDelete,
 }: {
   item: MenuItemWithCategory;
+  isMobile: boolean;
   onEdit: () => void;
   onToggle: (v: boolean) => void;
   onDelete: () => void;
 }) {
   return (
-    <Card style={[styles.itemCard, !item.isAvailable && styles.itemCardUnavailable]}>
+    <Card style={[styles.itemCard, isMobile && styles.itemCardMobile, !item.isAvailable && styles.itemCardUnavailable]}>
       <View style={styles.itemCardHeader}>
         <Badge label={item.category.name} size="sm" variant="default" />
         <View style={styles.itemCardActions}>
@@ -506,6 +555,38 @@ const styles = StyleSheet.create({
     gap: spacing[5],
     alignItems: 'flex-start',
   },
+  layoutMobile: {
+    flexDirection: 'column',
+  },
+  desktopActions: {
+    flexDirection: 'row',
+    gap: spacing[3],
+  },
+  mobileActions: {
+    flexDirection: 'column',
+    gap: spacing[2],
+    alignItems: 'flex-end',
+  },
+  mobileCatScroll: {
+    flexShrink: 0,
+  },
+  mobileCatContent: {
+    flexDirection: 'row',
+    gap: spacing[2],
+    paddingVertical: spacing[1],
+  },
+  mobileCatPill: {
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
+    borderRadius: 99,
+    backgroundColor: colors.neutral[100],
+    borderWidth: 1,
+    borderColor: colors.neutral[200],
+  },
+  mobileCatPillActive: {
+    backgroundColor: colors.brand[50],
+    borderColor: colors.brand[600],
+  },
   categorySidebar: {
     width: 200,
     flexShrink: 0,
@@ -536,10 +617,19 @@ const styles = StyleSheet.create({
     gap: spacing[4],
     alignContent: 'flex-start',
   },
+  itemsGridMobile: {
+    flexDirection: 'column',
+    flexWrap: 'nowrap',
+  },
   itemCard: {
     width: '30%',
     minWidth: 200,
     flex: 1,
+  },
+  itemCardMobile: {
+    width: '100%',
+    minWidth: 0,
+    flex: 0,
   },
   itemCardUnavailable: {
     opacity: 0.6,
