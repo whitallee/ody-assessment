@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Pressable, StyleSheet } from 'react-native';
+import { View, Pressable, StyleSheet, useWindowDimensions } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { colors, spacing, formatCurrency } from '@ody/shared';
 import {
@@ -33,6 +33,9 @@ const REWARD_TYPE_COLORS: Record<RewardType, string> = {
 };
 
 export default function RewardsPage() {
+  const { width } = useWindowDimensions();
+  const isMobile = width < 768;
+
   const [showCreate, setShowCreate] = useState(false);
   const [editReward, setEditReward] = useState<Reward | null>(null);
 
@@ -49,12 +52,12 @@ export default function RewardsPage() {
       actions={<Button label="New Reward" onPress={() => setShowCreate(true)} />}
     >
       {/* Points earn rate info card */}
-      <EarnRateCard />
+      <EarnRateCard isMobile={isMobile} />
 
       {/* Active rewards */}
       <Typography variant="heading4" style={styles.sectionTitle}>Active Rewards</Typography>
       {isLoading ? (
-        <View style={styles.grid}>
+        <View style={isMobile ? styles.gridMobile : styles.grid}>
           {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} height={140} borderRadius={16} />)}
         </View>
       ) : active.length === 0 ? (
@@ -64,9 +67,9 @@ export default function RewardsPage() {
           </View>
         </Card>
       ) : (
-        <View style={styles.grid}>
+        <View style={isMobile ? styles.gridMobile : styles.grid}>
           {active.map((r) => (
-            <RewardCard key={r.id} reward={r} onEdit={() => setEditReward(r)} />
+            <RewardCard key={r.id} reward={r} onEdit={() => setEditReward(r)} isMobile={isMobile} />
           ))}
         </View>
       )}
@@ -75,9 +78,9 @@ export default function RewardsPage() {
       {inactive.length > 0 && (
         <>
           <Typography variant="heading4" style={styles.sectionTitle}>Inactive</Typography>
-          <View style={styles.grid}>
+          <View style={isMobile ? styles.gridMobile : styles.grid}>
             {inactive.map((r) => (
-              <RewardCard key={r.id} reward={r} onEdit={() => setEditReward(r)} />
+              <RewardCard key={r.id} reward={r} onEdit={() => setEditReward(r)} isMobile={isMobile} />
             ))}
           </View>
         </>
@@ -91,22 +94,22 @@ export default function RewardsPage() {
   );
 }
 
-function EarnRateCard() {
+function EarnRateCard({ isMobile }: { isMobile: boolean }) {
   const { data: settingsResponse } = useGetSettings();
   const settings = settingsResponse?.data;
 
   return (
     <Card variant="elevated" style={styles.earnCard}>
-      <View style={styles.earnRow}>
-        <View style={styles.earnStat}>
+      <View style={isMobile ? styles.earnRowMobile : styles.earnRow}>
+        <View style={isMobile ? styles.earnStatMobile : styles.earnStat}>
           <Typography variant="overline">Points Per Dollar</Typography>
           <Typography variant="heading2" color="brand">
             {settings?.loyaltyPointsPerDollar ?? 10}
           </Typography>
           <Typography variant="caption" color="secondary">Earned on every order</Typography>
         </View>
-        <View style={styles.earnDivider} />
-        <View style={styles.earnStat}>
+        {!isMobile && <View style={styles.earnDivider} />}
+        <View style={isMobile ? styles.earnStatMobile : styles.earnStat}>
           <Typography variant="overline">Program Status</Typography>
           <View style={[styles.statusPill, { backgroundColor: settings?.loyaltyEnabled ? colors.success[500] + '20' : colors.neutral[100] }]}>
             <Typography style={[styles.statusPillText, { color: settings?.loyaltyEnabled ? colors.success[600] : colors.neutral[500] }]}>
@@ -115,8 +118,8 @@ function EarnRateCard() {
           </View>
           <Typography variant="caption" color="secondary">Configure in Settings</Typography>
         </View>
-        <View style={styles.earnDivider} />
-        <View style={styles.earnStat}>
+        {!isMobile && <View style={styles.earnDivider} />}
+        <View style={isMobile ? styles.earnStatMobile : styles.earnStat}>
           <Typography variant="overline">How It Works</Typography>
           <Typography variant="body" color="secondary">
             Points are earned automatically when orders are marked completed.
@@ -127,7 +130,7 @@ function EarnRateCard() {
   );
 }
 
-function RewardCard({ reward, onEdit }: { reward: Reward; onEdit: () => void }) {
+function RewardCard({ reward, onEdit, isMobile }: { reward: Reward; onEdit: () => void; isMobile: boolean }) {
   const qc = useQueryClient();
   const { toast } = useToast();
 
@@ -144,7 +147,7 @@ function RewardCard({ reward, onEdit }: { reward: Reward; onEdit: () => void }) 
   const typeColor = REWARD_TYPE_COLORS[reward.rewardType as RewardType] ?? colors.neutral[400];
 
   return (
-    <Card style={[styles.rewardCard, !reward.isActive && styles.rewardCardInactive]} variant="elevated">
+    <Card style={[isMobile ? styles.rewardCardMobile : styles.rewardCard, !reward.isActive && styles.rewardCardInactive]} variant="elevated">
       <View style={[styles.rewardAccent, { backgroundColor: typeColor }]} />
       <View style={styles.rewardTypePill}>
         <Typography style={[styles.rewardTypeText, { color: typeColor }]}>
@@ -357,10 +360,21 @@ const styles = StyleSheet.create({
     gap: spacing[4],
     marginBottom: spacing[4],
   },
+  gridMobile: {
+    flexDirection: 'column',
+    gap: spacing[4],
+    marginBottom: spacing[4],
+  },
   rewardCard: {
     flex: 1,
     minWidth: 220,
     maxWidth: 320,
+    position: 'relative',
+    overflow: 'hidden',
+    gap: spacing[2],
+  },
+  rewardCardMobile: {
+    width: '100%',
     position: 'relative',
     overflow: 'hidden',
     gap: spacing[2],
@@ -398,7 +412,9 @@ const styles = StyleSheet.create({
   empty: { alignItems: 'center', padding: spacing[6] },
   earnCard: { marginBottom: spacing[4] },
   earnRow: { flexDirection: 'row', gap: spacing[4], flexWrap: 'wrap' },
+  earnRowMobile: { flexDirection: 'column', gap: spacing[4] },
   earnStat: { flex: 1, minWidth: 150, gap: spacing[1] },
+  earnStatMobile: { gap: spacing[1] },
   earnDivider: { width: 1, backgroundColor: colors.neutral[100] },
   statusPill: { alignSelf: 'flex-start', paddingVertical: 4, paddingHorizontal: 12, borderRadius: 20 },
   statusPillText: { fontSize: 13, fontFamily: 'Inter_600SemiBold' },
