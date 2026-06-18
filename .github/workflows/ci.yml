@@ -8,7 +8,7 @@ on:
 
 jobs:
   ci:
-    name: Typecheck · Test · Generated files
+    name: Typecheck · Test
     runs-on: ubuntu-latest
 
     steps:
@@ -26,26 +26,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Generated files are gitignored, so regenerate them before typechecking.
+      # If a backend schema change breaks the dashboard's types, typecheck will catch it.
+      - name: Generate contract
+        run: pnpm gen:contract
+
       - name: Typecheck
         run: pnpm typecheck
 
       - name: Test
         run: pnpm test
-
-      # ── Staleness check ──────────────────────────────────────────────────
-      # Regenerate the OpenAPI spec and Orval hooks, then fail if the
-      # committed generated files don't match. Forces devs to run
-      # `pnpm gen:contract` and commit the output whenever the backend
-      # schema or routes change.
-      - name: Regenerate contract
-        run: pnpm gen:contract
-
-      - name: Assert generated files are up to date
-        run: |
-          if ! git diff --exit-code \
-                services/backend/openapi.json \
-                packages/api-client/src/generated/index.ts; then
-            echo ""
-            echo "Generated files are stale. Run 'pnpm gen:contract' locally and commit the result."
-            exit 1
-          fi
