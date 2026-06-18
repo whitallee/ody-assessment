@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Pressable, StyleSheet } from 'react-native';
+import { View, Pressable, StyleSheet, useWindowDimensions } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { colors, spacing, formatDate } from '@ody/shared';
 import {
@@ -55,6 +55,8 @@ const STATUS_COLORS: Record<ReservationStatus, string> = {
 };
 
 export default function ReservationsPage() {
+  const { width } = useWindowDimensions();
+  const isMobile = width < 768;
   const [statusFilter, setStatusFilter] = useState<ReservationStatus | 'all'>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -90,27 +92,96 @@ export default function ReservationsPage() {
       </View>
 
       <Card padding="none">
-        <View style={styles.tableHeader}>
-          {['Guest', 'Party', 'Date & Time', 'Table', 'Status', ''].map((h) => (
-            <Typography key={h} variant="overline" style={styles.th}>
-              {h}
-            </Typography>
-          ))}
-        </View>
+        {isMobile ? (
+          /* ── Mobile: card-based list ── */
+          <>
+            {isLoading
+              ? Array.from({ length: 5 }).map((_, i) => (
+                  <View key={i} style={styles.reservationCard}>
+                    <View style={styles.reservationCardHeader}>
+                      <View style={{ flex: 1, gap: 4 }}>
+                        <Skeleton width="40%" height={13} />
+                        <Skeleton width="25%" height={11} />
+                      </View>
+                      <Skeleton width={70} height={22} borderRadius={6} />
+                    </View>
+                    <View style={styles.reservationCardMeta}>
+                      <Skeleton width="15%" height={11} />
+                      <Skeleton width="45%" height={11} />
+                    </View>
+                  </View>
+                ))
+              : reservations.map((r) => (
+                  <Pressable
+                    key={r.id}
+                    style={({ hovered }: { hovered?: boolean }) => [
+                      styles.reservationCard,
+                      hovered && styles.rowHover,
+                    ]}
+                    onPress={() => setSelectedId(r.id)}
+                  >
+                    <View style={styles.reservationCardHeader}>
+                      <View style={{ flex: 1 }}>
+                        <Typography variant="bodyMedium">{r.customerName}</Typography>
+                        {r.customerPhone && (
+                          <Typography variant="caption" color="secondary">{r.customerPhone}</Typography>
+                        )}
+                      </View>
+                      <ReservationBadge status={r.status as ReservationStatus} />
+                    </View>
+                    <View style={styles.reservationCardMeta}>
+                      <Typography variant="caption" color="secondary">
+                        Party of {r.partySize}
+                      </Typography>
+                      <Typography variant="caption" color="secondary"> · </Typography>
+                      <Typography variant="caption" color="secondary">
+                        {formatDate(r.reservationDate)}
+                      </Typography>
+                      <Typography variant="caption" color="secondary">
+                        {' '}
+                        {new Date(r.reservationDate).toLocaleTimeString([], {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </Typography>
+                      {r.tableNumber != null && (
+                        <>
+                          <Typography variant="caption" color="secondary"> · </Typography>
+                          <Typography variant="caption" color="secondary">
+                            Table {r.tableNumber}
+                          </Typography>
+                        </>
+                      )}
+                    </View>
+                  </Pressable>
+                ))}
+          </>
+        ) : (
+          /* ── Desktop: table layout ── */
+          <>
+            <View style={styles.tableHeader}>
+              {['Guest', 'Party', 'Date & Time', 'Table', 'Status', ''].map((h) => (
+                <Typography key={h} variant="overline" style={styles.th}>
+                  {h}
+                </Typography>
+              ))}
+            </View>
 
-        {isLoading
-          ? Array.from({ length: 5 }).map((_, i) => (
-              <View key={i} style={styles.row}>
-                <Skeleton width="20%" height={13} />
-                <Skeleton width="8%" height={13} />
-                <Skeleton width="22%" height={13} />
-                <Skeleton width="10%" height={13} />
-                <Skeleton width={70} height={22} borderRadius={6} />
-              </View>
-            ))
-          : reservations.map((r) => (
-              <ReservationRow key={r.id} reservation={r} onSelect={() => setSelectedId(r.id)} />
-            ))}
+            {isLoading
+              ? Array.from({ length: 5 }).map((_, i) => (
+                  <View key={i} style={styles.row}>
+                    <Skeleton width="20%" height={13} />
+                    <Skeleton width="8%" height={13} />
+                    <Skeleton width="22%" height={13} />
+                    <Skeleton width="10%" height={13} />
+                    <Skeleton width={70} height={22} borderRadius={6} />
+                  </View>
+                ))
+              : reservations.map((r) => (
+                  <ReservationRow key={r.id} reservation={r} onSelect={() => setSelectedId(r.id)} />
+                ))}
+          </>
+        )}
 
         {!isLoading && reservations.length === 0 && (
           <View style={styles.empty}>
@@ -504,5 +575,23 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     gap: spacing[2],
     flexWrap: 'wrap',
+  },
+  reservationCard: {
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[3.5],
+    borderBottomWidth: 1,
+    borderBottomColor: colors.neutral[50],
+    gap: spacing[2],
+  },
+  reservationCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing[3],
+  },
+  reservationCardMeta: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
   },
 });
