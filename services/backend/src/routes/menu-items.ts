@@ -7,6 +7,7 @@ import {
   MenuItemWithCategorySchema,
   CreateMenuItemSchema,
   UpdateMenuItemSchema,
+  ReorderMenuItemsSchema,
 } from '../db/validators';
 
 export const menuItemsRoutes = new OpenAPIHono<Env>();
@@ -145,6 +146,39 @@ menuItemsRoutes.openapi(
       .returning();
     if (!row) return c.json({ error: 'Menu item not found' }, 404);
     return c.json(row, 200);
+  },
+);
+
+// ─── PATCH /reorder ───────────────────────────────────────────────────────────
+
+menuItemsRoutes.openapi(
+  createRoute({
+    method: 'patch',
+    path: '/reorder',
+    tags: ['Menu Items'],
+    summary: 'Batch-update sortOrder for menu items',
+    request: {
+      body: {
+        content: { 'application/json': { schema: ReorderMenuItemsSchema } },
+        required: true,
+      },
+    },
+    responses: {
+      200: {
+        content: { 'application/json': { schema: z.object({ success: z.boolean() }) } },
+        description: 'Sort orders updated',
+      },
+    },
+  }),
+  async (c) => {
+    const db = c.get('db');
+    const items = c.req.valid('json');
+    await Promise.all(
+      items.map(({ id, sortOrder }) =>
+        db.update(menuItems).set({ sortOrder }).where(eq(menuItems.id, id)),
+      ),
+    );
+    return c.json({ success: true }, 200);
   },
 );
 
