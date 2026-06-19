@@ -229,15 +229,14 @@ pnpm --filter @ody/backend run deploy
 
 ### Dashboard (Cloudflare Pages)
 
-```bash
-# Build (bakes the production API URL in at build time)
-pnpm --filter @ody/dashboard run build:web
+The dashboard auto-deploys via the Cloudflare Pages GitHub integration on every push to `main`. No manual deploy step needed.
 
-# Deploy
-pnpm exec wrangler pages deploy apps/dashboard/dist --project-name ody-dashboard
-```
+For initial setup, connect the repo in the Cloudflare Pages dashboard with:
+- **Build command:** `pnpm gen:contract && pnpm --filter @ody/dashboard run build:web`
+- **Output directory:** `apps/dashboard/dist`
+- **Framework preset:** None
 
-> For a proper multi-environment setup, remove the hardcoded URL from `build:web` and configure `EXPO_PUBLIC_API_URL` as an environment variable in the Cloudflare Pages dashboard under Settings → Environment Variables. Pages injects it at build time automatically.
+The production API URL is baked in via `apps/dashboard/.env.production` — no environment variable configuration needed in Pages.
 
 ---
 
@@ -274,9 +273,6 @@ pnpm exec wrangler pages deploy apps/dashboard/dist --project-name ody-dashboard
 
 ### What I'd add with more time
 
-- E2E tests with Playwright
 - Optimistic updates on order status changes
 - Real-time order updates via Cloudflare Durable Objects or SSE
-- Customer search and filter in CRM
-- Menu item drag-to-reorder (schema already has `sortOrder`)
 - Proper multi-environment CI/CD with staging + production Pages deployments
