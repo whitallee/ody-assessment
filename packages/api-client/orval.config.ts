@@ -10,7 +10,7 @@ export default defineConfig({
       target: './src/generated/index.ts',
       client: 'react-query',
       httpClient: 'fetch',
-      baseUrl: process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8787',
+      baseUrl: '',
       override: {
         mutator: {
           path: './src/fetcher.ts',
