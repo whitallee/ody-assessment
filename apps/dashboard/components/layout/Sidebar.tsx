@@ -1,4 +1,4 @@
-import { View, Pressable, StyleSheet, ScrollView } from 'react-native';
+import { View, Pressable, StyleSheet, ScrollView, useWindowDimensions } from 'react-native';
 import { useRouter, usePathname } from 'expo-router';
 import { colors, fontFamily, fontSize, spacing, radius } from '@ody/shared';
 import { Typography } from '@/components/ui/Typography';
@@ -22,6 +22,40 @@ const NAV_ITEMS: NavItem[] = [
 export function Sidebar() {
   const router = useRouter();
   const pathname = usePathname();
+  const { width } = useWindowDimensions();
+  const isMobile = width < 768;
+
+  if (isMobile) {
+    return (
+      <View style={styles.bottomBar}>
+        {NAV_ITEMS.map((item) => {
+          const isActive =
+            item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
+          return (
+            <Pressable
+              key={item.href}
+              onPress={() => router.push(item.href as never)}
+              style={({ pressed }: { pressed: boolean }) => [
+                styles.tabItem,
+                isActive && styles.tabItemActive,
+                pressed && { opacity: 0.7 },
+              ]}
+            >
+              <Typography style={[styles.tabIcon, isActive && styles.tabIconActive]}>
+                {item.icon}
+              </Typography>
+              <Typography
+                style={[styles.tabLabel, isActive && styles.tabLabelActive]}
+                numberOfLines={1}
+              >
+                {item.label}
+              </Typography>
+            </Pressable>
+          );
+        })}
+      </View>
+    );
+  }
 
   return (
     <View style={styles.sidebar}>
@@ -78,6 +112,7 @@ export function Sidebar() {
 }
 
 const styles = StyleSheet.create({
+  // ─── Desktop Sidebar ──────────────────────────────────────────────────────────
   sidebar: {
     width: 240,
     backgroundColor: colors.neutral[950],
@@ -176,5 +211,44 @@ const styles = StyleSheet.create({
     color: colors.neutral[600],
     textTransform: 'uppercase',
     letterSpacing: 1.5,
+  },
+
+  // ─── Mobile Bottom Tab Bar ────────────────────────────────────────────────────
+  bottomBar: {
+    flexDirection: 'row',
+    backgroundColor: colors.neutral[950],
+    borderTopWidth: 1,
+    borderTopColor: colors.neutral[800],
+    paddingBottom: spacing[2],
+  },
+  tabItem: {
+    flex: 1,
+    alignItems: 'center',
+    paddingTop: spacing[2],
+    paddingHorizontal: spacing[1],
+    borderTopWidth: 2,
+    borderTopColor: 'transparent',
+  },
+  tabItemActive: {
+    borderTopColor: colors.brand[400],
+  },
+  tabIcon: {
+    fontSize: 18,
+    color: colors.neutral[500],
+    marginBottom: 2,
+    textAlign: 'center',
+  },
+  tabIconActive: {
+    color: colors.brand[400],
+  },
+  tabLabel: {
+    fontFamily: fontFamily.body,
+    fontSize: fontSize.xs,
+    color: colors.neutral[500],
+    textAlign: 'center',
+  },
+  tabLabelActive: {
+    color: colors.brand[400],
+    fontFamily: fontFamily.bodyMedium,
   },
 });
